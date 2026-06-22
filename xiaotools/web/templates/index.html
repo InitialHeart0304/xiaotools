@@ -1,0 +1,2952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIA DB-Kingscada</title>
+    <link rel="icon" type="image/x-icon" href="/ico/hat_star_icon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        neutral: '#f8fafc',
+                        dark: '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Microsoft YaHei', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .step-active {
+                @apply bg-primary text-white;
+            }
+            .step-inactive {
+                @apply bg-gray-200 text-gray-400;
+            }
+            .data-card {
+                @apply bg-white border border-slate-200 rounded-2xl shadow-sm;
+            }
+            .table-container {
+                @apply h-[calc(100vh-480px)] overflow-y-auto;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                @apply w-1.5;
+            }
+            .scrollbar-hide::-webkit-scrollbar-thumb {
+                @apply bg-slate-300 rounded-full;
+            }
+            /* 左侧菜单样式 */
+            .menu-item {
+                @apply text-gray-600 hover:bg-blue-50 hover:text-blue-600;
+            }
+            .menu-item.active {
+                @apply bg-blue-50 text-blue-600 font-semibold;
+            }
+            
+            /* 侧边栏折叠样式 */
+            #sidebar.collapsed {
+                width: 72px;
+            }
+            #sidebar.collapsed .logo-text,
+            #sidebar.collapsed .menu-text,
+            #sidebar.collapsed .user-text,
+            #sidebar.collapsed .date-text,
+            #sidebar.collapsed .logout-link {
+                display: none;
+            }
+            #sidebar.collapsed .menu-item {
+                justify-content: center;
+                position: relative;
+            }
+            #sidebar.collapsed .menu-item:hover::after {
+                content: attr(data-tooltip);
+                position: absolute;
+                left: 100%;
+                top: 50%;
+                transform: translateY(-50%);
+                background: #333;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                white-space: nowrap;
+                z-index: 1000;
+                margin-left: 8px;
+                opacity: 1;
+                transition: opacity 0.2s;
+            }
+            #sidebar.collapsed .menu-item i {
+                margin-right: 0;
+            }
+            #sidebar.collapsed .flex.items-center {
+                justify-content: center;
+            }
+            #sidebar.collapsed .brand-plc {
+                margin-right: 0;
+            }
+        }
+    </style>
+    
+    <!-- 音频处理工具样式 -->
+    <style>
+        /* 音频处理工具专用样式 - 覆盖Tailwind CSS */
+        .audio-card {
+            background: white !important;
+            border-radius: 20px !important;
+            padding: 30px !important;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15) !important;
+            margin-bottom: 20px !important;
+        }
+        
+        .audio-card h2 {
+            color: #5a6c7d !important;
+            font-size: 1.3em !important;
+            margin-bottom: 20px !important;
+            padding-bottom: 10px !important;
+            border-bottom: 2px solid #f0f0f0 !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+        }
+        
+        .audio-settings-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+            gap: 20px !important;
+        }
+        
+        .audio-setting-item {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+        }
+        
+        .audio-setting-item label {
+            font-weight: 600 !important;
+            color: #555 !important;
+            font-size: 0.95em !important;
+        }
+        
+        .audio-setting-item select,
+        .audio-setting-item input[type="text"] {
+            padding: 12px 15px !important;
+            border: 2px solid #e0e0e0 !important;
+            border-radius: 10px !important;
+            font-size: 1em !important;
+            transition: all 0.3s !important;
+            background: white !important;
+            font-family: inherit !important;
+            box-sizing: border-box !important;
+        }
+        
+        .audio-setting-item select:focus,
+        .audio-setting-item input:focus {
+            border-color: #667eea !important;
+            outline: none !important;
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.1) !important;
+        }
+        
+        .audio-text-area {
+            width: 100% !important;
+            min-height: 220px !important;
+            padding: 15px !important;
+            border: 2px solid #e0e0e0 !important;
+            border-radius: 10px !important;
+            font-size: 1em !important;
+            resize: vertical !important;
+            font-family: inherit !important;
+            transition: border-color 0.3s !important;
+        }
+        
+        .audio-text-area:focus {
+            border-color: #667eea !important;
+            outline: none !important;
+        }
+        
+        .audio-btn {
+            padding: 14px 30px !important;
+            border: none !important;
+            border-radius: 12px !important;
+            font-size: 1em !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            transition: all 0.3s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            font-family: inherit !important;
+        }
+        
+        .audio-btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            color: white !important;
+            flex: 1 !important;
+            min-width: 150px !important;
+            justify-content: center !important;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3) !important;
+        }
+        
+        .audio-btn-primary:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4) !important;
+        }
+        
+        .audio-status-area {
+            margin-top: 20px !important;
+            padding: 15px !important;
+            border-radius: 10px !important;
+            background: #f8f9fa !important;
+            min-height: 50px !important;
+        }
+        
+        .audio-progress-bar {
+            width: 100% !important;
+            height: 8px !important;
+            background: #e0e0e0 !important;
+            border-radius: 4px !important;
+            overflow: hidden !important;
+            margin-top: 10px !important;
+            display: none !important;
+        }
+        
+        .audio-progress-fill {
+            height: 100% !important;
+            background: linear-gradient(90deg, #667eea, #764ba2) !important;
+            transition: width 0.3s !important;
+            width: 0% !important;
+        }
+        
+        .audio-toast {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            padding: 15px 25px !important;
+            background: white !important;
+            border-radius: 10px !important;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15) !important;
+            animation: slideIn 0.3s !important;
+            z-index: 1000 !important;
+        }
+        
+        .audio-toast.success { border-left: 4px solid #4ade80 !important; }
+        .audio-toast.error { border-left: 4px solid #ef4444 !important; }
+        .audio-toast.info { border-left: 4px solid #667eea !important; }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .audio-player-card {
+            margin-top: 15px !important;
+            padding: 15px !important;
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+            border-radius: 12px !important;
+            border: 1px solid #7dd3fc !important;
+            display: none !important;
+        }
+        
+        .audio-player-card .label {
+            font-size: 0.9em !important;
+            color: #0369a1 !important;
+            font-weight: 600 !important;
+            margin-bottom: 8px !important;
+        }
+        
+        .audio-player-card audio {
+            width: 100% !important;
+        }
+        
+        .audio-upload-section {
+            display: flex !important;
+            gap: 15px !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+            margin-top: 15px !important;
+        }
+        
+        .audio-file-label {
+            padding: 10px 20px !important;
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            color: white !important;
+            border-radius: 10px !important;
+            cursor: pointer !important;
+            font-weight: 500 !important;
+            transition: transform 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        
+        .audio-file-label:hover { transform: translateY(-2px) !important; }
+        .audio-file-label input { display: none !important; }
+        
+        .audio-download-label {
+            padding: 10px 20px !important;
+            background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+            color: white !important;
+            border-radius: 10px !important;
+            cursor: pointer !important;
+            font-weight: 500 !important;
+            transition: transform 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        
+        .audio-download-label:hover { transform: translateY(-2px) !important; }
+        .audio-download-label a { display: none !important; }
+        
+        .audio-excel-tip {
+            margin-top: 12px !important;
+            padding: 12px 15px !important;
+            background: linear-gradient(135deg, #fff7ed, #fef3c7) !important;
+            border-left: 4px solid #f59e0b !important;
+            border-radius: 8px !important;
+            font-size: 0.9em !important;
+            color: #92400e !important;
+            line-height: 1.7 !important;
+        }
+        
+        .audio-detect-info {
+            margin-top: 12px !important;
+            padding: 12px 15px !important;
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
+            border-left: 4px solid #22c55e !important;
+            border-radius: 8px !important;
+            font-size: 0.9em !important;
+            color: #166534 !important;
+            line-height: 1.7 !important;
+            display: none !important;
+        }
+        
+        .audio-detect-info strong {
+            color: #15803d !important;
+        }
+        
+        .audio-options-row {
+            display: flex !important;
+            gap: 20px !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+            margin-top: 15px !important;
+        }
+        
+        .audio-checkbox-item {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            cursor: pointer !important;
+        }
+        
+        .audio-checkbox-item input[type="checkbox"] {
+            width: 18px !important;
+            height: 18px !important;
+            accent-color: #667eea !important;
+            cursor: pointer !important;
+        }
+        
+        /* 文本列表样式 */
+        .audio-text-list-wrapper {
+            max-height: 420px !important;
+            min-height: 150px !important;
+            overflow-y: auto !important;
+            border: 2px solid #e0e0e0 !important;
+            border-radius: 12px !important;
+            background: #fafafa !important;
+            margin-top: 15px !important;
+            display: block !important;
+        }
+        
+        .audio-text-list-wrapper:focus-within {
+            border-color: #667eea !important;
+        }
+        
+        .audio-text-list {
+            padding: 8px !important;
+        }
+        
+        .audio-text-list-header {
+            display: grid !important;
+            grid-template-columns: 50px 1fr 1.2fr 80px 80px !important;
+            gap: 10px !important;
+            padding: 8px 12px !important;
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            color: #475569 !important;
+            font-size: 0.85em !important;
+            margin-bottom: 8px !important;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 1 !important;
+        }
+        
+        .audio-text-list-item {
+            display: grid !important;
+            grid-template-columns: 50px 1fr 1.2fr 80px 80px !important;
+            gap: 10px !important;
+            align-items: center !important;
+            padding: 10px 12px !important;
+            background: white !important;
+            border-radius: 8px !important;
+            margin-bottom: 6px !important;
+            border: 1px solid #e8e8e8 !important;
+            transition: all 0.2s !important;
+        }
+        
+        .audio-text-list-item:hover {
+            border-color: #667eea !important;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.08) !important;
+        }
+        
+        .audio-add-row-section {
+            display: flex !important;
+            gap: 10px !important;
+            margin-top: 12px !important;
+            padding: 12px !important;
+            background: #f8f9fa !important;
+            border-radius: 10px !important;
+            border: 2px dashed #cbd5e1 !important;
+        }
+        
+        .audio-add-row-section input {
+            flex: 1 !important;
+            padding: 8px 12px !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            font-size: 0.95em !important;
+            font-family: inherit !important;
+            box-sizing: border-box !important;
+        }
+        
+        .audio-add-row-section button {
+            padding: 8px 16px !important;
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 6px !important;
+            cursor: pointer !important;
+            font-weight: 600 !important;
+            font-family: inherit !important;
+        }
+        
+        .audio-add-row-section button:hover {
+            transform: translateY(-1px) !important;
+        }
+        
+        .audio-preview-btn {
+            background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            cursor: pointer !important;
+            font-size: 0.85em !important;
+            font-weight: 500 !important;
+            transition: all 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            font-family: inherit !important;
+        }
+        
+        .audio-preview-btn:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 3px 10px rgba(6, 182, 212, 0.3) !important;
+        }
+        
+        .audio-remove-btn {
+            background: #fee2e2 !important;
+            color: #b91c1c !important;
+            border: none !important;
+            border-radius: 6px !important;
+            padding: 4px 8px !important;
+            cursor: pointer !important;
+            font-size: 0.85em !important;
+            transition: all 0.2s !important;
+        }
+        
+        .audio-remove-btn:hover {
+            background: #fecaca !important;
+        }
+        
+        .audio-line-count-badge {
+            display: inline-block !important;
+            padding: 4px 12px !important;
+            background: linear-gradient(135deg, #667eea, #764ba2) !important;
+            color: white !important;
+            border-radius: 20px !important;
+            font-size: 0.85em !important;
+            font-weight: 600 !important;
+        }
+        
+        .audio-empty-list {
+            padding: 40px !important;
+            text-align: center !important;
+            color: #999 !important;
+        }
+        
+        .audio-empty-list .icon {
+            font-size: 2.5em !important;
+            margin-bottom: 10px !important;
+        }
+    </style>
+</head>
+<body class="bg-neutral min-h-screen flex">
+    <!-- 左侧菜单栏 -->
+    <aside class="w-64 bg-white shadow-lg flex-shrink-0 transition-all duration-300 overflow-hidden" id="sidebar">
+        <div class="h-full flex flex-col">
+            <!-- Logo区域 -->
+            <div class="p-6 border-b border-gray-200 flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="bg-primary text-white font-bold text-xl w-15 h-10 flex items-center justify-center mr-4 brand-plc" 
+                         style="display: flex; align-items: center; justify-content: center;">
+                        <span>PLC</span>
+                    </div>
+                    <div class="logo-text">
+                        <h1 class="text-xl font-bold text-dark">工业自动化工具</h1>
+                        <p class="text-xs text-secondary mt-1">v2.5.0</p>
+                    </div>
+                </div>
+                <button id="toggle-sidebar" class="p-2 rounded-lg hover:bg-gray-100 transition-colors" onclick="toggleSidebar()">
+                    <i class="fa fa-chevron-left text-gray-500"></i>
+                </button>
+            </div>
+            
+            <!-- 菜单列表 -->
+            <nav class="flex-1 p-4">
+                <ul class="space-y-2">
+                    <!-- TIA DB转换工具 -->
+                    <li>
+                        <a href="#" class="menu-item active flex items-center px-4 py-3 rounded-lg transition-all" data-menu="tia-db" data-tooltip="TIA DB转换" onclick="switchMenu('tia-db')">
+                            <i class="fa fa-exchange w-5 text-center mr-3"></i>
+                            <span class="menu-text">TIA DB转换</span>
+                        </a>
+                    </li>
+                    
+                    <!-- 音频处理工具 -->
+                    <li>
+                        <a href="#" class="menu-item flex items-center px-4 py-3 rounded-lg transition-all" data-menu="audio-tool" data-tooltip="音频处理" onclick="switchMenu('audio-tool')">
+                            <i class="fa fa-microphone w-5 text-center mr-3"></i>
+                            <span class="menu-text">音频处理</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <!-- 用户信息 -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center">
+                            <i class="fa fa-user text-gray-600"></i>
+                        </div>
+                        <span class="ml-2 text-sm font-medium user-text">{{ current_user }}</span>
+                    </div>
+                    <a href="/logout" class="text-gray-500 hover:text-gray-700 logout-link">
+                        <i class="fa fa-sign-out"></i>
+                    </a>
+                </div>
+                <div class="mt-2 text-xs text-gray-500 date-text">
+                    {{ current_date }}
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- 右侧主体内容 -->
+    <div class="flex-1 flex flex-col" id="main-content">
+        <!-- 顶部导航栏 -->
+        <header class="bg-white shadow-sm">
+            <div class="px-8 py-4 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-dark" id="page-title">TIA DB 转换工具</h2>
+                    <p class="text-sm text-secondary" id="page-desc">工业自动化点表转换工具</p>
+                </div>
+                <div class="flex items-center">
+                    <button class="bg-white border border-gray-300 px-4 py-2 rounded-md text-secondary hover:bg-gray-50 mr-6">
+                        转换历史
+                    </button>
+                    <div id="developer-button" class="bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors">
+                         <span class="nav-icon"><i class="fa fa-user"></i></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+    <!-- 主体内容 -->
+    <main class="flex-1 overflow-y-auto">
+        <!-- TIA DB转换工具页面 -->
+        <div id="tia-db-page" class="container mx-auto px-8 py-8">
+            <!-- 现代导航栏 -->
+            <div class="nav-card mb-6">
+                <nav class="navbar" aria-label="主导航">
+                    <ul class="nav-links" role="list">
+                        <!-- 选项1: 文件 -->
+                        <li class="nav-item" role="listitem">
+                            <a href="#" class="nav-link active" data-tab="home" id="tab-home" aria-current="page" onclick="switchStep(1)">
+                                <span class="nav-icon"><i class="fa fa-file"></i></span>
+                                <span>主页</span>
+                            </a>
+                        </li>
+                        <!-- 选项2: 检查核对 -->
+                        <li class="nav-item" role="listitem">
+                            <a href="#" class="nav-link" data-tab="verify" id="tab-verify" onclick="switchStep(2)">
+                                <span class="nav-icon"><i class="fa fa-list"></i></span>
+                                <span>清单</span>
+                            </a>
+                        </li>
+                        <!-- 选项3: 导出 -->
+                        <li class="nav-item" role="listitem">
+                            <a href="#" class="nav-link" data-tab="export" id="tab-export" onclick="switchStep(3)">
+                                <span class="nav-icon"><i class="fa fa-download"></i></span>
+                                <span>导出</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+    
+    <style>
+        /* ==================== 导航栏设计 ==================== */
+        /* 现代卡片式导航栏，圆润轻盈 */
+        .bg-primary {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+        }
+        /* 用户片段中的核心样式 + 增加轻微圆角与过渡 */
+        .brand-plc {
+            width: 2.75rem;    /* w-11 约 2.75rem，略大于原 w-10(2.5rem) 但保留视觉 */
+            height: 2.75rem;
+            border-radius: 0.75rem;  /* 现代圆角，不再是直角，更精致 */
+            transition: transform 0.2s ease, box-shadow 0.2s;
+        }
+        .brand-plc:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+        }
+        /* 保留原始文本样式，同时适配 flex 居中 */
+        .brand-plc span {
+            font-weight: 700;
+            font-size: 1.25rem;   /* text-xl */
+            letter-spacing: 0.5px;
+        }
+
+        .nav-card {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(0px);
+            border-radius: 2rem;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.02);
+            transition: box-shadow 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .nav-card:hover {
+            box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.12);
+        }
+
+        /* 导航栏内部布局 */
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            min-height: 80px;
+        }
+
+        /* 使用语义化 ul 列表结构，完全符合无障碍要求 */
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 0.5rem;
+            background: transparent;
+        }
+
+        /* 每个导航项容器 */
+        .nav-item {
+            position: relative;
+        }
+
+        /* 优雅的导航链接样式 */
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.7rem 1.8rem;
+            font-size: 1.05rem;
+            font-weight: 500;
+            color: #4b5563;
+            text-decoration: none;
+            border-radius: 2.5rem;
+            transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+            background: transparent;
+            letter-spacing: 0.3px;
+            backdrop-filter: blur(0px);
+            cursor: pointer;
+        }
+
+        /* 图标样式 */
+        .nav-icon {
+            font-size: 1.25rem;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05));
+            transition: transform 0.2s ease;
+        }
+
+        /* 悬浮效果 */
+        .nav-link:hover {
+            background: rgba(59, 130, 246, 0.08);
+            color: #1e40af;
+            transform: translateY(-1px);
+        }
+
+        .nav-link:hover .nav-icon {
+            transform: scale(1.05);
+        }
+
+        /* 活动状态（当前选中项）设计：高亮主色 + 底部光效 + 轻微阴影 */
+        .nav-link.active {
+            background: linear-gradient(115deg, #2563eb, #1d4ed8);
+            color: white;
+            box-shadow: 0 8px 18px -6px rgba(37, 99, 235, 0.35);
+            font-weight: 600;
+        }
+
+        .nav-link.active .nav-icon {
+            filter: drop-shadow(0 0 2px rgba(255,255,255,0.3));
+            transform: scale(1.02);
+        }
+
+        /* 焦点样式 - 键盘导航可见性 */
+        .nav-link:focus-visible {
+            outline: 3px solid #2563eb;
+            outline-offset: 3px;
+            border-radius: 2.5rem;
+            background-color: rgba(37, 99, 235, 0.1);
+        }
+
+        /* ==================== 响应式设计 ==================== */
+        @media (max-width: 680px) {
+            .navbar {
+                padding: 0.5rem 1rem;
+                min-height: 70px;
+            }
+
+            .nav-links {
+                gap: 0.25rem;
+                width: 100%;
+                justify-content: center;
+            }
+
+            .nav-link {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+                gap: 0.3rem;
+            }
+
+            .nav-icon {
+                font-size: 1.1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-link {
+                padding: 0.45rem 0.85rem;
+                font-size: 0.85rem;
+            }
+            .nav-icon {
+                font-size: 1rem;
+            }
+        }
+    </style>
+    
+    <script>
+        // ==================== 侧边栏折叠功能 ====================
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.getElementById('toggle-sidebar');
+            
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                toggleBtn.innerHTML = '<i class="fa fa-chevron-left text-gray-500"></i>';
+            } else {
+                sidebar.classList.add('collapsed');
+                toggleBtn.innerHTML = '<i class="fa fa-chevron-right text-gray-500"></i>';
+            }
+        }
+        
+        // ==================== 音频处理工具初始化 ====================
+        function initAudioTool() {
+            console.log('initAudioTool() 被调用');
+            
+            setTimeout(() => {
+                // 使用querySelectorAll获取元素（因为getElementById似乎无法正常工作）
+                const allLists = document.querySelectorAll('.audio-text-list');
+                audioTextList = allLists.length > 0 ? allLists[0] : null;
+                console.log('audioTextList:', audioTextList);
+                
+                // 使用同样方式获取其他元素
+                const allLineCounts = document.querySelectorAll('.audio-line-count-badge');
+                audioLineCount = allLineCounts.length > 0 ? allLineCounts[0] : null;
+                console.log('audioLineCount:', audioLineCount);
+                
+                audioStatusText = document.getElementById('audioStatusText');
+                audioProgressBar = document.getElementById('audioProgressBar');
+                audioProgressFill = document.getElementById('audioProgressFill');
+                audioPlayer = document.getElementById('audioPlayer');
+                audioElement = document.getElementById('audioElement');
+                audioTitle = document.getElementById('audioTitle');
+                audioNewRowText = document.getElementById('audioNewRowText');
+                audioNewRowName = document.getElementById('audioNewRowName');
+                audioDetectInfo = document.getElementById('audioDetectInfo');
+                audioDetectContent = document.getElementById('audioDetectContent');
+                
+                console.log('audioRows:', audioRows);
+                
+                // 绑定下载模板按钮
+                const templateDownloadBtn = document.getElementById('audioTemplateDownload');
+                if (templateDownloadBtn) {
+                    templateDownloadBtn.parentElement.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        fetch('/audio/api/download-template')
+                            .then(res => res.blob())
+                            .then(blob => {
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = '语音转写模板.xlsx';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                audioShowToast('模板下载成功', 'success');
+                            })
+                            .catch(err => audioShowToast('模板下载失败: ' + err.message, 'error'));
+                    });
+                }
+                
+                // 绑定Excel上传事件
+                const audioExcelFileInput = document.getElementById('audioExcelFile');
+                if (audioExcelFileInput) {
+                    // 先移除可能已存在的事件监听器
+                    const newInput = audioExcelFileInput.cloneNode(true);
+                    audioExcelFileInput.parentNode.replaceChild(newInput, audioExcelFileInput);
+                    
+                    newInput.addEventListener('change', function(e) {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        if (audioStatusText) {
+                            audioStatusText.innerHTML = '<i class="fa fa-spinner fa-spin"></i> 正在解析 Excel 文件...';
+                        }
+                        
+                        fetch('/audio/api/parse-excel', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+                            
+                            const lines = data.lines || [];
+                            const names = data.custom_names || [];
+                            audioRows = lines.map((text, i) => ({
+                                text: text,
+                                filename: (names[i] || '').trim()
+                            }));
+                            audioHasCustomNames = data.has_custom_names || false;
+                            
+                            if (data.detected && audioDetectContent) {
+                                const d = data.detected;
+                                let info = `共识别 ${data.count} 条文本`;
+                                if (d.text_column) info += ` · <strong>文本列</strong>: ${d.text_column}`;
+                                if (d.filename_column) info += ` · <strong>文件名列</strong>: ${d.filename_column}`;
+                                if (audioHasCustomNames) info += ` · <strong>含自定义文件名</strong>`;
+                                audioDetectContent.innerHTML = info;
+                                if (audioDetectInfo) audioDetectInfo.style.display = 'block';
+                            } else if (audioDetectInfo) {
+                                audioDetectInfo.style.display = 'none';
+                            }
+                            
+                            audioRenderList();
+                            if (audioStatusText) {
+                                audioStatusText.innerHTML = `<i class="fa fa-check-circle"></i> Excel 解析完成，共 ${data.count} 条文本`;
+                            }
+                            audioShowToast(`成功导入 ${data.count} 条文本`, 'success');
+                        })
+                        .catch(err => {
+                            if (audioStatusText) {
+                                audioStatusText.innerHTML = `<i class="fa fa-exclamation-circle"></i> 解析失败: ${err.message}`;
+                            }
+                            audioShowToast('解析失败: ' + err.message, 'error');
+                        })
+                        .finally(() => {
+                            e.target.value = '';
+                        });
+                    });
+                }
+                
+                if (audioTextList) {
+                    console.log('调用 audioRenderList()');
+                    audioRenderList();
+                } else {
+                    console.error('audioTextList 元素未找到！');
+                    audioShowToast('初始化失败，请刷新页面重试', 'error');
+                }
+            }, 100);
+        }
+        
+        // ==================== 菜单切换功能 ====================
+        function switchMenu(menu) {
+            console.log('切换菜单:', menu);
+            
+            // 更新菜单活动状态
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(item => {
+                if (item.dataset.menu === menu) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+            
+            // 更新页面标题
+            const pageTitle = document.getElementById('page-title');
+            const pageDesc = document.getElementById('page-desc');
+            
+            if (menu === 'tia-db') {
+                pageTitle.textContent = 'TIA DB 转换工具';
+                pageDesc.textContent = '工业自动化点表转换工具';
+            } else if (menu === 'audio-tool') {
+                pageTitle.textContent = '音频处理工具';
+                pageDesc.textContent = '文字转语音工具';
+            }
+            
+            // 隐藏所有页面
+            const tiaDbPage = document.getElementById('tia-db-page');
+            const audioToolPage = document.getElementById('audio-tool-page');
+            
+            if (tiaDbPage) tiaDbPage.classList.add('hidden');
+            if (audioToolPage) audioToolPage.classList.add('hidden');
+            
+            // 显示当前页面
+            if (menu === 'tia-db') {
+                if (tiaDbPage) tiaDbPage.classList.remove('hidden');
+            } else if (menu === 'audio-tool') {
+                if (audioToolPage) audioToolPage.classList.remove('hidden');
+                setTimeout(() => initAudioTool(), 50);
+            }
+        }
+        
+        // 步骤切换函数
+        function switchStep(step) {
+            console.log('Switching to step:', step);
+            
+            // 更新导航栏活动状态
+            const navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach((link, index) => {
+                if (index + 1 === step) {
+                    // 当前步骤
+                    link.classList.add('active');
+                    link.setAttribute('aria-current', 'page');
+                } else {
+                    // 其他步骤
+                    link.classList.remove('active');
+                    link.setAttribute('aria-current', 'false');
+                }
+            });
+            
+            // 隐藏所有步骤内容
+            const stepContents = [
+                document.getElementById('step-1'),
+                document.getElementById('step-3'), // 步骤2现在是检查核对
+                document.getElementById('step-4')  // 步骤3现在是导出
+            ];
+            
+            stepContents.forEach((content, index) => {
+                if (content) {
+                    content.classList.add('hidden');
+                }
+            });
+            
+            // 显示当前步骤内容
+            let currentStepContent;
+            if (step === 1) {
+                currentStepContent = document.getElementById('step-1');
+            } else if (step === 2) {
+                currentStepContent = document.getElementById('step-3'); // 步骤2现在是检查核对
+            } else if (step === 3) {
+                currentStepContent = document.getElementById('step-4'); // 步骤3现在是导出
+            }
+            
+            if (currentStepContent) {
+                currentStepContent.classList.remove('hidden');
+                
+                // 如果是步骤2（检查核对），初始化图表
+                if (step === 2) {
+                    setTimeout(initTypeDistChart, 100);
+                }
+            }
+        }
+        
+        // 拖拽功能实现
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropArea = document.querySelector('.border-2.border-dashed.border-gray-200.rounded-lg.p-8.text-center');
+            const fileInput = document.getElementById('file');
+            const filePathInput = document.getElementById('file-path');
+            const fileContentTextarea = document.getElementById('file-content');
+            
+            if (dropArea) {
+                // 拖入事件
+                dropArea.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    dropArea.classList.add('border-primary');
+                    dropArea.classList.add('bg-blue-50');
+                });
+                
+                // 拖出事件
+                dropArea.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    dropArea.classList.remove('border-primary');
+                    dropArea.classList.remove('bg-blue-50');
+                });
+                
+                // 释放事件
+                dropArea.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    dropArea.classList.remove('border-primary');
+                    dropArea.classList.remove('bg-blue-50');
+                    
+                    if (e.dataTransfer.files.length) {
+                        const file = e.dataTransfer.files[0];
+                        fileInput.files = e.dataTransfer.files;
+                        
+                        // 更新文件路径显示
+                        if (filePathInput) {
+                            filePathInput.value = file.name;
+                        }
+                        
+                        // 读取文件内容（仅支持文本文件）
+                        if (fileContentTextarea && (file.type === 'text/plain' || file.name.endsWith('.db') || file.name.endsWith('.scl') || file.name.endsWith('.xml'))) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                fileContentTextarea.value = e.target.result;
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                });
+            }
+            
+            // 文件选择事件
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    if (this.files.length) {
+                        const file = this.files[0];
+                        if (filePathInput) {
+                            filePathInput.value = file.name;
+                        }
+                        
+                        // 读取文件内容（仅支持文本文件）
+                        if (fileContentTextarea && (file.type === 'text/plain' || file.name.endsWith('.db') || file.name.endsWith('.scl') || file.name.endsWith('.xml'))) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                fileContentTextarea.value = e.target.result;
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                });
+            }
+        });
+        
+        // 初始化变量类型分布图表
+        function initTypeDistChart() {
+            const chartDom = document.getElementById('typeDistChart');
+            if (chartDom) {
+                const myChart = echarts.init(chartDom);
+                const chartData = [];
+                
+                // 检查是否有实际的转换结果数据
+                if (window.conversionResult && window.conversionResult.stats) {
+                    const stats = window.conversionResult.stats;
+                    console.log('使用实际转换结果数据初始化图表:', stats);
+                    
+                    // 添加实际的统计数据
+                    if (stats.bool_count > 0) {
+                        chartData.push({ value: stats.bool_count, name: 'BOOL', itemStyle: { color: '#2563eb' } });
+                    }
+                    if (stats.real_count > 0) {
+                        chartData.push({ value: stats.real_count, name: 'REAL', itemStyle: { color: '#14b8a6' } });
+                    }
+                    if (stats.dint_count > 0) {
+                        chartData.push({ value: stats.dint_count, name: 'DINT', itemStyle: { color: '#f59e0b' } });
+                    }
+                    if (stats.int_count > 0) {
+                        chartData.push({ value: stats.int_count, name: 'INT', itemStyle: { color: '#8b5cf6' } });
+                    }
+                    if (stats.word_count > 0) {
+                        chartData.push({ value: stats.word_count, name: 'WORD', itemStyle: { color: '#ec4899' } });
+                    }
+                    if (stats.dword_count > 0) {
+                        chartData.push({ value: stats.dword_count, name: 'DWORD', itemStyle: { color: '#8b5cf6' } });
+                    }
+                } else {
+                    console.log('没有找到实际转换结果数据，使用默认数据');
+                    // 如果没有实际数据，使用默认数据
+                    chartData.push({ value: 18, name: 'BOOL', itemStyle: { color: '#2563eb' } });
+                    chartData.push({ value: 24, name: 'REAL', itemStyle: { color: '#14b8a6' } });
+                }
+                
+                // 如果没有数据，添加一个默认项
+                if (chartData.length === 0) {
+                    chartData.push({ value: 1, name: '无数据', itemStyle: { color: '#94a3b8' } });
+                }
+                
+                const option = {
+                    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                    legend: { 
+                        bottom: '0%', 
+                        left: 'center', 
+                        icon: 'circle', 
+                        textStyle: { fontSize: 10, color: '#64748b' },
+                        type: 'scroll', // 启用滚动图例
+                        pageIconSize: 10,
+                        pageTextStyle: { fontSize: 10 }
+                    },
+                    series: [{
+                        name: '变量类型',
+                        type: 'pie',
+                        radius: ['40%', '70%'],
+                        avoidLabelOverlap: false,
+                        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                        label: { show: false },
+                        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+                        labelLine: { show: false },
+                        data: chartData
+                    }]
+                };
+                myChart.setOption(option);
+                window.addEventListener('resize', () => myChart.resize());
+            }
+        }
+        
+        // 为步骤按钮添加点击事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 开始分析按钮
+            const startAnalysisBtn = document.getElementById('start-analysis-btn');
+            if (startAnalysisBtn) {
+                startAnalysisBtn.addEventListener('click', function() {
+                    // 模拟分析过程
+                    const conversionStatus = document.getElementById('conversion-status');
+                    if (conversionStatus) {
+                        conversionStatus.textContent = '分析中...';
+                    }
+                    
+                    // 模拟分析完成
+                    setTimeout(() => {
+                        if (conversionStatus) {
+                            conversionStatus.textContent = '分析完成';
+                        }
+                        const analysisResult = document.getElementById('analysis-result');
+                        if (analysisResult) {
+                            analysisResult.textContent = '分析结果：\n- 成功识别 10 个变量\n- 无错误或警告\n- 转换完成';
+                        }
+                    }, 2000);
+                });
+            }
+            
+            // 继续导出按钮
+            const proceedToExportBtn = document.getElementById('proceed-to-export-btn');
+            if (proceedToExportBtn) {
+                proceedToExportBtn.addEventListener('click', function() {
+                    switchStep(3); // 现在步骤3是导出
+                });
+            }
+            
+            // 返回分析按钮
+            const backToAnalysisBtn = document.getElementById('back-to-analysis-btn');
+            if (backToAnalysisBtn) {
+                backToAnalysisBtn.addEventListener('click', function() {
+                    switchStep(1); // 现在直接返回步骤1
+                });
+            }
+            
+            // 返回核对按钮
+            const backToCheckBtn = document.getElementById('back-to-check-btn');
+            if (backToCheckBtn) {
+                backToCheckBtn.addEventListener('click', function() {
+                    switchStep(2); // 现在步骤2是检查核对
+                });
+            }
+            
+            // 更新数据卡片函数
+            function updateDataCards(data) {
+                // 打印数据，用于调试
+                console.log('更新数据卡片，接收到的数据:', data);
+                
+                // 确保数据存在且有效
+                const totalPoints = data.total_points || 0;
+                const deviceCount = data.device_count || 0;
+                const boolCount = data.bool_count || 0;
+                const realCount = data.real_count || 0;
+                
+                console.log('统计数据:', {
+                    totalPoints,
+                    deviceCount,
+                    boolCount,
+                    realCount
+                });
+                
+                // 确保步骤3元素存在（现在步骤2是检查核对）
+                const step3 = document.getElementById('step-3');
+                if (!step3) {
+                    console.error('步骤3元素未找到');
+                    return;
+                }
+                
+                // 强制更新所有数据卡片
+                console.log('强制更新数据卡片...');
+                
+                // 直接通过类名查找所有数据卡片
+                const dataCards = document.querySelectorAll('.data-card');
+                console.log('找到的数据卡片数量:', dataCards.length);
+                
+                if (dataCards.length >= 4) {
+                    // 更新总点位数量
+                    const totalPointsElement = dataCards[0].querySelector('.text-2xl.font-bold');
+                    if (totalPointsElement) {
+                        totalPointsElement.textContent = totalPoints;
+                        console.log('更新总点位数量:', totalPoints);
+                    } else {
+                        console.error('总点位数量元素未找到');
+                    }
+                    
+                    // 更新占用内存 - 按实际数据类型计算
+                    const boolCount = data.bool_count || 0;
+                    const intCount = data.int_count || 0;
+                    const realCount = data.real_count || 0;
+                    const dintCount = data.dint_count || 0;
+                    const wordCount = data.word_count || 0;
+                    const dwordCount = data.dword_count || 0;
+                    
+                    // 按实际数据类型计算内存占用
+                    // BOOL: 1位(1/8字节), INT/SHORT: 2字节, REAL/FLOAT: 4字节, DINT/LONG: 4字节, WORD: 2字节, DWORD: 4字节
+                    const memoryBytes = 
+                        (boolCount / 8) +  // BOOL: 1位 = 1/8字节
+                        (intCount * 2) +   // INT/SHORT: 2字节
+                        (realCount * 4) +  // REAL/FLOAT: 4字节
+                        (dintCount * 4) +  // DINT/LONG: 4字节
+                        (wordCount * 2) +  // WORD: 2字节
+                        (dwordCount * 4);  // DWORD: 4字节
+                    
+                    const memoryElement = dataCards[1].querySelector('.text-2xl.font-bold');
+                    if (memoryElement) {
+                        memoryElement.textContent = memoryBytes.toFixed(1);
+                        console.log('更新占用内存:', memoryBytes.toFixed(1));
+                    } else {
+                        console.error('占用内存元素未找到');
+                    }
+                    
+                    // 更新逻辑设备数
+                    const deviceElement = dataCards[2].querySelector('.text-2xl.font-bold');
+                    if (deviceElement) {
+                        deviceElement.textContent = deviceCount;
+                        console.log('更新逻辑设备数:', deviceCount);
+                    } else {
+                        console.error('逻辑设备数元素未找到');
+                    }
+                    
+                    // 更新潜在地址冲突
+                    const conflictElement = dataCards[3].querySelector('.text-2xl.font-bold');
+                    if (conflictElement) {
+                        conflictElement.textContent = '0'; // 假设没有冲突
+                        console.log('更新潜在地址冲突: 0');
+                    } else {
+                        console.error('潜在地址冲突元素未找到');
+                    }
+                }
+                
+                // 更新图表数据
+                const chartDom = step3.querySelector('#typeDistChart');
+                if (chartDom) {
+                    // 确保图表容器有足够的高度
+                    chartDom.style.height = '256px';
+                    
+                    const myChart = echarts.init(chartDom);
+                    const chartData = [];
+                    
+                    // 确保至少有数据显示
+                    if (boolCount > 0) {
+                        chartData.push({ value: boolCount, name: 'BOOL', itemStyle: { color: '#2563eb' } });
+                    }
+                    if (realCount > 0) {
+                        chartData.push({ value: realCount, name: 'REAL', itemStyle: { color: '#14b8a6' } });
+                    }
+                    if (data.dint_count > 0) {
+                        chartData.push({ value: data.dint_count, name: 'DINT', itemStyle: { color: '#f59e0b' } });
+                    }
+                    if (data.dword_count > 0) {
+                        chartData.push({ value: data.dword_count, name: 'DWORD', itemStyle: { color: '#ec4899' } });
+                    }
+                    if (data.int_count > 0) {
+                        chartData.push({ value: data.int_count, name: 'INT', itemStyle: { color: '#8b5cf6' } });
+                    }
+                    
+                    // 如果没有数据，添加一个默认项
+                    if (chartData.length === 0) {
+                        chartData.push({ value: 1, name: '无数据', itemStyle: { color: '#94a3b8' } });
+                    }
+                    
+                    const option = {
+                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                        legend: { 
+                            bottom: '0%', 
+                            left: 'center', 
+                            icon: 'circle', 
+                            textStyle: { fontSize: 10, color: '#64748b' },
+                            type: 'scroll', // 启用滚动图例
+                            pageIconSize: 10,
+                            pageTextStyle: { fontSize: 10 }
+                        },
+                        series: [{
+                            name: '变量类型',
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            avoidLabelOverlap: false,
+                            itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                            label: { show: false },
+                            emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+                            labelLine: { show: false },
+                            data: chartData
+                        }]
+                    };
+                    myChart.setOption(option);
+                    
+                    // 监听窗口大小变化，自动调整图表大小
+                    window.addEventListener('resize', () => myChart.resize());
+                    console.log('更新图表数据:', chartData);
+                } else {
+                    console.error('图表元素未找到');
+                }
+                
+                // 更新图表下方的统计数据
+                const statsContainer = step3.querySelector('.mt-4.grid.grid-cols-2.gap-4');
+                if (statsContainer) {
+                    statsContainer.innerHTML = '';
+                    
+                    if (boolCount > 0) {
+                        statsContainer.innerHTML += `
+                            <div class="p-3 bg-slate-50 rounded-lg">
+                                <p class="text-xs text-slate-400">BOOL (数字量)</p>
+                                <p class="text-lg font-bold text-blue-600">${boolCount} <span class="text-xs font-normal">个</span></p>
+                            </div>
+                        `;
+                    }
+                    if (realCount > 0) {
+                        statsContainer.innerHTML += `
+                            <div class="p-3 bg-slate-50 rounded-lg">
+                                <p class="text-xs text-slate-400">REAL (浮点数)</p>
+                                <p class="text-lg font-bold text-teal-600">${realCount} <span class="text-xs font-normal">个</span></p>
+                            </div>
+                        `;
+                    }
+                    if (data.dint_count > 0) {
+                        statsContainer.innerHTML += `
+                            <div class="p-3 bg-slate-50 rounded-lg">
+                                <p class="text-xs text-slate-400">DINT (双整数)</p>
+                                <p class="text-lg font-bold text-amber-600">${data.dint_count} <span class="text-xs font-normal">个</span></p>
+                            </div>
+                        `;
+                    }
+                    if (data.int_count > 0 || data.dword_count > 0) {
+                        const otherCount = data.int_count + data.dword_count;
+                        statsContainer.innerHTML += `
+                            <div class="p-3 bg-slate-50 rounded-lg">
+                                <p class="text-xs text-slate-400">其他类型</p>
+                                <p class="text-lg font-bold text-purple-600">${otherCount} <span class="text-xs font-normal">个</span></p>
+                            </div>
+                        `;
+                    }
+                    console.log('更新图表下方统计数据');
+                } else {
+                    console.error('图表下方统计数据容器未找到');
+                }
+                
+                // 更新表格底部的分页信息
+                const paginationInfo = step3.querySelector('.px-6.py-3.bg-slate-50.border-t.border-slate-100 .text-[10px].text-slate-400');
+                if (paginationInfo) {
+                    // 确保数据存在且有效
+                    const displayCount = Math.min(15, totalPoints);
+                    paginationInfo.textContent = `显示 1 到 ${displayCount} 条，共计 ${totalPoints} 条数据`;
+                    console.log('更新分页信息:', `显示 1 到 ${displayCount} 条，共计 ${totalPoints} 条数据`);
+                } else {
+                    console.error('分页信息元素未找到');
+                }
+                
+                // 确保页面可以正常查看
+                if (step3) {
+                    // 确保内容可见
+                    step3.style.display = 'block';
+                    step3.classList.remove('hidden');
+                    
+                    // 滚动到页面顶部，确保用户可以看到内容
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+                
+                console.log('所有数据卡片更新完成');
+            }
+            
+            // 为所有开始转换分析按钮添加点击事件
+            const convertButtons = document.querySelectorAll('#convert-btn');
+            convertButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // 模拟转换过程
+                    alert('开始转换分析，请稍候...');
+                    
+                    // 收集配置参数
+                    const form = document.getElementById('config-form');
+                    const formData = new FormData(form);
+                    const fileContent = document.getElementById('file-content').value;
+                    formData.append('file_content', fileContent);
+                    
+                    // 发送转换请求到后端
+                    fetch('/convert', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            console.log('转换成功，接收到的数据:', data);
+                            console.log('数据长度:', data.data.length);
+                            console.log('总点位数量:', data.stats.total_points);
+                            
+                            // 保存转换结果到全局变量
+                            window.conversionResult = data;
+                            
+                            console.log('转换结果统计:', data.stats);
+                            
+                            // 先切换到步骤2（检查核对）
+                            switchStep(2);
+                            
+                            // 等待DOM渲染完成后再更新数据
+                            setTimeout(() => {
+                                // 强制更新所有数据，确保显示的是实际的转换结果
+                                console.log('强制更新所有数据...');
+                                
+                                // 直接更新步骤3的表格（现在步骤2是检查核对）
+                                const step3 = document.getElementById('step-3');
+                                if (step3) {
+                                    // 强制更新表格数据
+                                    console.log('开始更新表格数据...');
+                                    
+                                    // 尝试多种选择器来找到表格
+                                    let tableBody = step3.querySelector('.overflow-auto table tbody');
+                                    if (!tableBody) {
+                                        tableBody = step3.querySelector('table tbody');
+                                    }
+                                    if (!tableBody) {
+                                        tableBody = document.querySelector('#step-3 .overflow-auto table tbody');
+                                    }
+                                    
+                                    console.log('找到的表格tbody元素:', tableBody);
+                                    
+                                    if (tableBody) {
+                                        // 先打印数据，确保数据正确
+                                        console.log('实际转换结果数据:', data.data);
+                                        console.log('数据长度:', data.data.length);
+                                        
+                                        // 清空表格内容
+                                        tableBody.innerHTML = '';
+                                        console.log('表格内容已清空');
+                                        
+                                        // 确保数据存在且是数组
+                                        if (Array.isArray(data.data) && data.data.length > 0) {
+                                            // 添加实际的转换结果数据
+                                            // 根据数据类型返回对应的颜色类
+                                            function getDataTypeColor(type) {
+                                                switch (type) {
+                                                    case 'IODisc':
+                                                        return 'bg-blue-100 text-blue-700';
+                                                    case 'IOShort':
+                                                        return 'bg-purple-100 text-purple-700';
+                                                    case 'IOLong':
+                                                        return 'bg-amber-100 text-amber-700';
+                                                    case 'IOFloat':
+                                                        return 'bg-green-100 text-green-700';
+                                                    case 'IOWord':
+                                                        return 'bg-cyan-100 text-cyan-700';
+                                                    case 'BOOL':
+                                                        return 'bg-blue-100 text-blue-700';
+                                                    case 'REAL':
+                                                        return 'bg-teal-100 text-teal-700';
+                                                    case 'DINT':
+                                                        return 'bg-amber-100 text-amber-700';
+                                                    case 'INT':
+                                                        return 'bg-purple-100 text-purple-700';
+                                                    case 'WORD':
+                                                        return 'bg-pink-100 text-pink-700';
+                                                    case 'DWORD':
+                                                        return 'bg-indigo-100 text-indigo-700';
+                                                    default:
+                                                        return 'bg-gray-100 text-gray-700';
+                                                }
+                                            }
+                                            
+                                            // 显示所有数据，不限制数量
+                                            data.data.forEach((item, index) => {
+                                                console.log('处理数据项:', index + 1, item);
+                                                const row = document.createElement('tr');
+                                                row.className = 'border-b border-slate-100 hover:bg-slate-50';
+                                                const dataType = item.TagDataType || '';
+                                                const colorClass = getDataTypeColor(dataType);
+                                                row.innerHTML = `
+                                                    <td class="px-6 py-3 text-sm font-medium text-slate-900">${index + 1}</td>
+                                                    <td class="px-6 py-3 font-medium text-slate-900">${item.TagID || ''}</td>
+                                                    <td class="px-6 py-3">${item.TagName || ''}</td>
+                                                    <td class="px-6 py-3">${item.Description || ''}</td>
+                                                    <td class="px-6 py-3">
+                                                        <span class="px-2 py-1 ${colorClass} rounded text-[10px] font-bold">${dataType}</span>
+                                                    </td>
+                                                    <td class="px-6 py-3 text-slate-400">${item.ItemName || ''}</td>
+                                                    <td class="px-6 py-3 text-center text-green-500"><i class="fa fa-check-circle"></i></td>
+                                                `;
+                                                tableBody.appendChild(row);
+                                            });
+                                            console.log('表格数据已更新，共', data.data.length, '条');
+                                        } else {
+                                            // 如果没有数据，显示空数据提示
+                                            const row = document.createElement('tr');
+                                            row.innerHTML = `
+                                                <td colspan="7" class="px-6 py-10 text-center text-slate-400">
+                                                    暂无转换结果数据
+                                                </td>
+                                            `;
+                                            tableBody.appendChild(row);
+                                            console.log('没有转换结果数据');
+                                        }
+                                        
+                                        // 重新初始化搜索功能
+                                        initSearch();
+                                    } else {
+                                        console.error('表格tbody元素未找到，尝试其他选择器...');
+                                        
+                                        // 尝试直接查找所有表格
+                                        const tables = document.querySelectorAll('table');
+                                        console.log('找到的表格数量:', tables.length);
+                                        
+                                        if (tables.length > 0) {
+                                            const firstTable = tables[0];
+                                            const tbody = firstTable.querySelector('tbody');
+                                            if (tbody) {
+                                                console.log('找到第一个表格的tbody:', tbody);
+                                                // 清空并更新第一个表格
+                                                tbody.innerHTML = '';
+                                                if (Array.isArray(data.data) && data.data.length > 0) {
+                                                    // 根据数据类型返回对应的颜色类
+                                                    function getDataTypeColor(type) {
+                                                        switch (type) {
+                                                            case 'IODisc':
+                                                                return 'bg-blue-100 text-blue-700';
+                                                            case 'IOShort':
+                                                                return 'bg-purple-100 text-purple-700';
+                                                            case 'IOLong':
+                                                                return 'bg-amber-100 text-amber-700';
+                                                            case 'IOFloat':
+                                                                return 'bg-green-100 text-green-700';
+                                                            case 'BOOL':
+                                                                return 'bg-blue-100 text-blue-700';
+                                                            case 'REAL':
+                                                                return 'bg-teal-100 text-teal-700';
+                                                            case 'DINT':
+                                                                return 'bg-amber-100 text-amber-700';
+                                                            case 'INT':
+                                                                return 'bg-purple-100 text-purple-700';
+                                                            case 'WORD':
+                                                                return 'bg-pink-100 text-pink-700';
+                                                            case 'DWORD':
+                                                                return 'bg-indigo-100 text-indigo-700';
+                                                            default:
+                                                                return 'bg-gray-100 text-gray-700';
+                                                        }
+                                                    }
+                                                    
+                                                    data.data.forEach((item, index) => {
+                                                        const row = document.createElement('tr');
+                                                        row.className = 'border-b border-slate-100 hover:bg-slate-50';
+                                                        const dataType = item.TagDataType || '';
+                                                        const colorClass = getDataTypeColor(dataType);
+                                                        row.innerHTML = `
+                                                            <td class="px-6 py-3 text-sm font-medium text-slate-900">${index + 1}</td>
+                                                            <td class="px-6 py-3 font-medium text-slate-900">${item.TagID || ''}</td>
+                                                            <td class="px-6 py-3">${item.TagName || ''}</td>
+                                                            <td class="px-6 py-3">${item.Description || ''}</td>
+                                                            <td class="px-6 py-3">
+                                                                <span class="px-2 py-1 ${colorClass} rounded text-[10px] font-bold">${dataType}</span>
+                                                            </td>
+                                                            <td class="px-6 py-3 text-slate-400">${item.ItemName || ''}</td>
+                                                            <td class="px-6 py-3 text-center text-green-500"><i class="fa fa-check-circle"></i></td>
+                                                        `;
+                                                        tbody.appendChild(row);
+                                                    });
+                                                    console.log('已更新第一个表格，共', data.data.length, '条');
+
+                                                    
+                                                    // 重新初始化搜索功能
+                                                    initSearch();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 强制更新数据卡片
+                                    console.log('开始更新数据卡片...');
+                                    
+                                    // 尝试多种选择器来找到数据卡片
+                                    let dataCards = step3.querySelectorAll('.data-card');
+                                    if (dataCards.length === 0) {
+                                        dataCards = document.querySelectorAll('.data-card');
+                                    }
+                                    
+                                    console.log('找到的数据卡片数量:', dataCards.length);
+                                    
+                                    if (dataCards.length >= 4) {
+                                        // 强制更新总点位数量
+                                        const totalPointsElement = dataCards[0].querySelector('.text-2xl.font-bold');
+                                        if (totalPointsElement) {
+                                            totalPointsElement.textContent = data.stats.total_points;
+                                            console.log('更新总点位数量:', data.stats.total_points);
+                                        }
+                                        
+                                        // 强制更新占用内存 - 按实际数据类型计算
+                                        const boolCount = data.stats.bool_count || 0;
+                                        const intCount = data.stats.int_count || 0;
+                                        const realCount = data.stats.real_count || 0;
+                                        const dintCount = data.stats.dint_count || 0;
+                                        const wordCount = data.stats.word_count || 0;
+                                        const dwordCount = data.stats.dword_count || 0;
+                                        
+                                        // 按实际数据类型计算内存占用
+                                        // BOOL: 1位(1/8字节), INT/SHORT: 2字节, REAL/FLOAT: 4字节, DINT/LONG: 4字节, WORD: 2字节, DWORD: 4字节
+                                        const memoryBytes = 
+                                            (boolCount / 8) +  // BOOL: 1位 = 1/8字节
+                                            (intCount * 2) +   // INT/SHORT: 2字节
+                                            (realCount * 4) +  // REAL/FLOAT: 4字节
+                                            (dintCount * 4) +  // DINT/LONG: 4字节
+                                            (wordCount * 2) +  // WORD: 2字节
+                                            (dwordCount * 4);  // DWORD: 4字节
+                                        
+                                        const memoryElement = dataCards[1].querySelector('.text-2xl.font-bold');
+                                        if (memoryElement) {
+                                            memoryElement.textContent = memoryBytes.toFixed(1);
+                                            console.log('更新占用内存:', memoryBytes.toFixed(1));
+                                        }
+                                        
+                                        // 强制更新逻辑设备数
+                                        const deviceElement = dataCards[2].querySelector('.text-2xl.font-bold');
+                                        if (deviceElement) {
+                                            deviceElement.textContent = data.stats.device_count;
+                                            console.log('更新逻辑设备数:', data.stats.device_count);
+                                        }
+                                    } else {
+                                        console.error('数据卡片数量不足，尝试直接查找特定元素...');
+                                        
+                                        // 尝试直接查找总点位数量元素
+                                        const totalPointsElement = document.querySelector('.data-card:nth-child(1) .text-2xl.font-bold');
+                                        if (totalPointsElement) {
+                                            totalPointsElement.textContent = data.stats.total_points;
+                                            console.log('直接更新总点位数量:', data.stats.total_points);
+                                        }
+                                        
+                                        // 尝试直接查找占用内存元素
+                                        const memoryElement = document.querySelector('.data-card:nth-child(2) .text-2xl.font-bold');
+                                        if (memoryElement) {
+                                            const boolCount = data.stats.bool_count || 0;
+                                            const intCount = data.stats.int_count || 0;
+                                            const realCount = data.stats.real_count || 0;
+                                            const dintCount = data.stats.dint_count || 0;
+                                            const wordCount = data.stats.word_count || 0;
+                                            const dwordCount = data.stats.dword_count || 0;
+                                            
+                                            // 按实际数据类型计算内存占用
+                                            // BOOL: 1位(1/8字节), INT/SHORT: 2字节, REAL/FLOAT: 4字节, DINT/LONG: 4字节, WORD: 2字节, DWORD: 4字节
+                                            const memoryBytes = 
+                                                (boolCount / 8) +  // BOOL: 1位 = 1/8字节
+                                                (intCount * 2) +   // INT/SHORT: 2字节
+                                                (realCount * 4) +  // REAL/FLOAT: 4字节
+                                                (dintCount * 4) +  // DINT/LONG: 4字节
+                                                (wordCount * 2) +  // WORD: 2字节
+                                                (dwordCount * 4);  // DWORD: 4字节
+                                            
+                                            memoryElement.textContent = memoryBytes.toFixed(1);
+                                            console.log('直接更新占用内存:', memoryBytes.toFixed(1));
+                                        }
+                                        
+                                        // 尝试直接查找逻辑设备数元素
+                                        const deviceElement = document.querySelector('.data-card:nth-child(3) .text-2xl.font-bold');
+                                        if (deviceElement) {
+                                            deviceElement.textContent = data.stats.device_count;
+                                            console.log('直接更新逻辑设备数:', data.stats.device_count);
+                                        }
+                                    }
+                                    
+                                    // 强制更新图表
+                                    console.log('开始更新图表...');
+                                    
+                                    // 尝试多种选择器来找到图表
+                                    let chartDom = step3.querySelector('#typeDistChart');
+                                    if (!chartDom) {
+                                        chartDom = document.querySelector('#typeDistChart');
+                                    }
+                                    
+                                    console.log('找到的图表元素:', chartDom);
+                                    
+                                    if (chartDom) {
+                                        // 确保图表容器有足够的高度
+                                        chartDom.style.height = '256px';
+                                        
+                                        const myChart = echarts.init(chartDom);
+                                        const chartData = [];
+                                        
+                                        console.log('图表数据统计:', {
+                                            bool_count: data.stats.bool_count,
+                                            real_count: data.stats.real_count,
+                                            dint_count: data.stats.dint_count,
+                                            int_count: data.stats.int_count,
+                                            word_count: data.stats.word_count,
+                                            dword_count: data.stats.dword_count
+                                        });
+                                        
+                                        // 确保至少有数据显示
+                                        if (data.stats.bool_count > 0) {
+                                            chartData.push({ value: data.stats.bool_count, name: 'BOOL', itemStyle: { color: '#2563eb' } });
+                                        }
+                                        if (data.stats.real_count > 0) {
+                                            chartData.push({ value: data.stats.real_count, name: 'REAL', itemStyle: { color: '#14b8a6' } });
+                                        }
+                                        if (data.stats.dint_count > 0) {
+                                            chartData.push({ value: data.stats.dint_count, name: 'DINT', itemStyle: { color: '#f59e0b' } });
+                                        }
+                                        if (data.stats.int_count > 0) {
+                                            chartData.push({ value: data.stats.int_count, name: 'INT', itemStyle: { color: '#8b5cf6' } });
+                                        }
+                                        if (data.stats.word_count > 0) {
+                                            chartData.push({ value: data.stats.word_count, name: 'WORD', itemStyle: { color: '#ec4899' } });
+                                        }
+                                        if (data.stats.dword_count > 0) {
+                                            chartData.push({ value: data.stats.dword_count, name: 'DWORD', itemStyle: { color: '#8b5cf6' } });
+                                        }
+                                        
+                                        // 如果没有数据，添加一个默认项
+                                        if (chartData.length === 0) {
+                                            chartData.push({ value: 1, name: '无数据', itemStyle: { color: '#94a3b8' } });
+                                        }
+                                        
+                                        const option = {
+                                            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                                            legend: { 
+                                                bottom: '0%', 
+                                                left: 'center', 
+                                                icon: 'circle', 
+                                                textStyle: { fontSize: 10, color: '#64748b' },
+                                                type: 'scroll', // 启用滚动图例
+                                                pageIconSize: 10,
+                                                pageTextStyle: { fontSize: 10 }
+                                            },
+                                            series: [{
+                                                name: '变量类型',
+                                                type: 'pie',
+                                                radius: ['40%', '70%'],
+                                                avoidLabelOverlap: false,
+                                                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                                                label: { show: false },
+                                                emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+                                                labelLine: { show: false },
+                                                data: chartData
+                                            }]
+                                        };
+                                        myChart.setOption(option);
+                                        
+                                        // 监听窗口大小变化，自动调整图表大小
+                                        window.addEventListener('resize', () => myChart.resize());
+                                        console.log('图表数据已更新:', chartData);
+                                    } else {
+                                        console.error('图表元素未找到');
+                                    }
+                                    
+                                    // 强制更新图表下方的统计数据
+                                    console.log('开始更新图表下方统计数据...');
+                                    
+                                    // 尝试多种选择器来找到统计数据容器
+                                    let statsContainer = step3.querySelector('.mt-4.grid.grid-cols-2.gap-4');
+                                    if (!statsContainer) {
+                                        statsContainer = document.querySelector('.mt-4.grid.grid-cols-2.gap-4');
+                                    }
+                                    
+                                    console.log('找到的统计数据容器:', statsContainer);
+                                    
+                                    if (statsContainer) {
+                                        // 清空容器内容
+                                        statsContainer.innerHTML = '';
+                                        console.log('统计数据容器已清空');
+                                        
+                                        // 添加实际的统计数据
+                                        if (data.stats.bool_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">BOOL (数字量)</p>
+                                                    <p class="text-lg font-bold text-blue-600">${data.stats.bool_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        if (data.stats.real_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">REAL (浮点数)</p>
+                                                    <p class="text-lg font-bold text-teal-600">${data.stats.real_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        if (data.stats.dint_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">DINT (双整数)</p>
+                                                    <p class="text-lg font-bold text-amber-600">${data.stats.dint_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        if (data.stats.int_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">INT (整数)</p>
+                                                    <p class="text-lg font-bold text-purple-600">${data.stats.int_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        if (data.stats.word_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">WORD (字)</p>
+                                                    <p class="text-lg font-bold text-pink-600">${data.stats.word_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        if (data.stats.dword_count > 0) {
+                                            statsContainer.innerHTML += `
+                                                <div class="p-3 bg-slate-50 rounded-lg">
+                                                    <p class="text-xs text-slate-400">DWORD (双字)</p>
+                                                    <p class="text-lg font-bold text-purple-600">${data.stats.dword_count} <span class="text-xs font-normal">个</span></p>
+                                                </div>
+                                            `;
+                                        }
+                                        console.log('图表下方统计数据已更新');
+                                    } else {
+                                        console.error('图表下方统计数据容器未找到');
+                                    }
+                                    
+                                    // 强制更新数据显示信息
+                                    console.log('开始更新数据显示信息...');
+                                    
+                                    // 尝试多种选择器来找到分页信息
+                                    let paginationInfo = step3.querySelector('.px-6.py-3.bg-slate-50.border-t.border-slate-100 .text-[10px].text-slate-400');
+                                    if (!paginationInfo) {
+                                        paginationInfo = document.querySelector('.px-6.py-3.bg-slate-50.border-t.border-slate-100 .text-[10px].text-slate-400');
+                                    }
+                                    
+                                    console.log('找到的数据显示信息元素:', paginationInfo);
+                                    
+                                    if (paginationInfo) {
+                                        // 显示所有数据，不限制数量
+                                        paginationInfo.textContent = `共计 ${data.stats.total_points} 条数据`;
+                                        console.log('数据显示信息已更新:', `共计 ${data.stats.total_points} 条数据`);
+                                    } else {
+                                        console.error('数据显示信息元素未找到');
+                                    }
+                                }
+                                
+                                console.log('所有结果已更新到核对页面');
+                            }, 100);
+                        } else {
+                            alert('转换失败: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('转换错误:', error);
+                        alert('转换过程中发生错误');
+                    });
+                });
+            });
+            
+            // 分页函数
+            function changePage(page) {
+                console.log('切换到页面:', page);
+                // 这里可以添加实际的分页逻辑
+                alert('切换到页面 ' + page);
+            }
+            
+            // 导出函数
+            function exportData() {
+                console.log('导出数据');
+                // 跳转到步骤4
+                switchStep(4);
+            }
+            
+            // 继续导出函数
+            const exportBtn = document.getElementById('export-btn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    exportData();
+                });
+            }
+            
+            // 下载文件函数
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', function() {
+                    console.log('下载文件');
+                    // 获取选择的导出格式
+                    const format = document.querySelector('input[name="export-format"]:checked').value;
+                    // 获取文件名
+                    const filename = document.getElementById('export-filename').value || 'conversion_result';
+                    // 发送下载请求
+                    const url = `/download?format=${encodeURIComponent(format)}&filename=${encodeURIComponent(filename)}`;
+                    window.location.href = url;
+                });
+            }
+            
+            // 添加搜索功能
+            function initSearch() {
+                const searchInput = document.querySelector('input[placeholder="搜索变量名/地址..."]');
+                if (searchInput) {
+                    // 先移除可能存在的事件监听器
+                    searchInput.removeEventListener('input', handleSearch);
+                    
+                    // 添加新的事件监听器
+                    searchInput.addEventListener('input', handleSearch);
+                    console.log('搜索功能已初始化');
+                } else {
+                    console.error('搜索输入框未找到');
+                }
+            }
+            
+            // 搜索处理函数
+            function handleSearch() {
+                const searchTerm = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('table tbody tr');
+                
+                console.log('搜索内容:', searchTerm);
+                console.log('找到的表格行数:', tableRows.length);
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    let match = false;
+                    
+                    cells.forEach(cell => {
+                        if (cell.textContent.toLowerCase().includes(searchTerm)) {
+                            match = true;
+                        }
+                    });
+                    
+                    if (match) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            }
+            
+            // 初始初始化搜索功能
+            initSearch();
+            
+            // 转换历史按钮点击事件
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(button => {
+                if (button.textContent.trim() === '转换历史') {
+                    button.addEventListener('click', function() {
+                        alert('转换历史功能正在开发中，敬请期待！');
+                    });
+                }
+            });
+            
+            // 开发者按钮点击事件
+            const developerButton = document.getElementById('developer-button');
+            const developerModal = document.getElementById('developer-modal');
+            const closeDeveloperModal = document.getElementById('close-developer-modal');
+            
+            console.log('Developer button:', developerButton);
+            console.log('Developer modal:', developerModal);
+            console.log('Close button:', closeDeveloperModal);
+            
+            if (developerButton && developerModal && closeDeveloperModal) {
+                console.log('All elements found, adding event listeners');
+                developerButton.addEventListener('click', function() {
+                    console.log('Developer button clicked');
+                    developerModal.classList.remove('hidden');
+                    console.log('Modal should now be visible');
+                });
+                
+                closeDeveloperModal.addEventListener('click', function() {
+                    console.log('Close button clicked');
+                    developerModal.classList.add('hidden');
+                });
+                
+                // 点击模态框外部关闭
+                developerModal.addEventListener('click', function(e) {
+                    if (e.target === developerModal) {
+                        console.log('Modal outside clicked');
+                        developerModal.classList.add('hidden');
+                    }
+                });
+            } else {
+                console.error('One or more elements not found');
+            }
+
+        });
+        
+        // 更新表格数据函数
+        function updateTableData(data, totalPoints) {
+            console.log('更新表格数据:', data);
+            console.log('总点位数量:', totalPoints);
+            
+            // 直接选择步骤3中的表格tbody元素
+            const step3 = document.getElementById('step-3');
+            if (!step3) {
+                console.error('步骤3元素未找到');
+                return;
+            }
+            
+            // 查找表格容器
+            const tableContainer = step3.querySelector('.table-container');
+            if (!tableContainer) {
+                console.error('表格容器未找到');
+                return;
+            }
+            
+            // 查找表格
+            const table = tableContainer.querySelector('table');
+            if (!table) {
+                console.error('表格元素未找到');
+                return;
+            }
+            
+            // 查找表格体
+            const tableBody = table.querySelector('tbody');
+            if (!tableBody) {
+                console.error('表格tbody元素未找到');
+                return;
+            }
+            
+            console.log('找到表格tbody元素:', tableBody);
+            updateTableBody(tableBody, data, totalPoints);
+        }
+        
+        // 更新表格body内容
+        function updateTableBody(tableBody, data, totalPoints) {
+            // 清空表格
+            tableBody.innerHTML = '';
+            
+            // 添加数据行
+            if (data && data.length > 0) {
+                data.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-blue-50/50 transition-colors';
+                    row.innerHTML = `
+                        <td class="px-6 py-3">${index + 1}</td>
+                        <td class="px-6 py-3 font-medium text-slate-900">${item.TagID}</td>
+                        <td class="px-6 py-3">${item.TagName}</td>
+                        <td class="px-6 py-3">${item.Description}</td>
+                        <td class="px-6 py-3">
+                            <span class="px-2 py-1 ${item.TagDataType === 'IOFloat' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'} rounded text-[10px] font-bold">
+                                ${item.TagDataType}
+                            </span>
+                        </td>
+                        <td class="px-6 py-3 text-slate-400">${item.ItemName}</td>
+                        <td class="px-6 py-3 text-center text-green-500">
+                            <i class="fa fa-check-circle"></i>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } else {
+                // 显示空数据提示
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="7" class="py-8 text-center text-slate-400">
+                        暂无转换数据
+                    </td>
+                `;
+                tableBody.appendChild(emptyRow);
+            }
+            
+            // 更新分页信息
+            const step3 = document.getElementById('step-3');
+            if (step3) {
+                const paginationInfo = step3.querySelector('.bg-slate-50.border-t.border-slate-100 .text-[10px].text-slate-400');
+                if (paginationInfo) {
+                    const displayCount = data && data.length > 0 ? Math.min(15, data.length) : 0;
+                    paginationInfo.textContent = `显示 1 到 ${displayCount} 条，共计 ${totalPoints} 条数据`;
+                    console.log('更新分页信息:', `显示 1 到 ${displayCount} 条，共计 ${totalPoints} 条数据`);
+                } else {
+                    console.error('分页信息元素未找到');
+                }
+            }
+        }
+        
+        // ==================== 音频处理工具功能 ====================
+        // 音频处理数据模型
+        let audioRows = [];      // [{ text: '...', filename: '...' }, ...]
+        let audioHasCustomNames = false;
+        
+        let audioTextList = null;
+        let audioLineCount = null;
+        let audioStatusText = null;
+        let audioProgressBar = null;
+        let audioProgressFill = null;
+        let audioPlayer = null;
+        let audioElement = null;
+        let audioTitle = null;
+        let audioNewRowText = null;
+        let audioNewRowName = null;
+        let audioDetectInfo = null;
+        let audioDetectContent = null;
+        
+        function audioGetParams() {
+            return {
+                voice: document.getElementById('audio-voice').value,
+                rate: document.getElementById('audio-rate').value,
+                volume: document.getElementById('audio-volume').value,
+                format: document.getElementById('audio-format').value,
+            };
+        }
+        
+        // 音频列表渲染
+        function audioRenderList() {
+            if (!audioTextList || !audioLineCount) return;
+            
+            if (audioRows.length === 0) {
+                audioTextList.innerHTML = `
+                    <div class="audio-empty-list">
+                        <div class="icon"><i class="fa fa-inbox"></i></div>
+                        <div>暂无文本，请添加或上传 Excel</div>
+                    </div>`;
+                audioLineCount.textContent = '0 行';
+                return;
+            }
+            
+            let html = `
+                <div class="audio-text-list-header">
+                    <div>#</div>
+                    <div>文本内容</div>
+                    <div>文件名</div>
+                    <div style="text-align:center">试听</div>
+                    <div style="text-align:center">操作</div>
+                </div>`;
+            
+            audioRows.forEach((row, idx) => {
+                const idx3 = String(idx + 1).padStart(3, '0');
+                const safeText = (row.text || '').replace(/</g, '&lt;');
+                const safeName = (row.filename || '').replace(/</g, '&lt;');
+                const hasName = (row.filename || '').trim().length > 0;
+                html += `
+                    <div class="audio-text-list-item" data-index="${idx}" id="audio-row-${idx}">
+                        <div style="color: #999; font-weight: 600; text-align: center; font-family: 'Consolas', 'Courier New', monospace;">${idx3}</div>
+                        <div style="color: #333; font-size: 0.95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${safeText}">${safeText || '<span style="color:#bbb">(空文本)</span>'}</div>
+                        <div style="color: #1e40af; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${safeName}">${safeName || '<span style="color:#bbb">— 使用模板 —</span>'}</div>
+                        <div style="text-align: center;">
+                            <button class="audio-preview-btn" data-index="${idx}"><i class="fa fa-play"></i> 试听</button>
+                        </div>
+                        <div style="text-align: center;">
+                            <button class="audio-remove-btn" data-index="${idx}"><i class="fa fa-times"></i></button>
+                        </div>
+                    </div>`;
+            });
+            
+            audioTextList.innerHTML = html;
+            audioLineCount.textContent = audioRows.length + ' 行';
+            
+            // 绑定按钮事件
+            audioTextList.querySelectorAll('.audio-preview-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    audioPreviewRow(parseInt(this.dataset.index, 10));
+                });
+            });
+            audioTextList.querySelectorAll('.audio-remove-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    audioRemoveRow(parseInt(this.dataset.index, 10));
+                });
+            });
+        }
+        
+        // 音频行操作
+        function audioAddRow() {
+            const text = audioNewRowText.value.trim();
+            const filename = audioNewRowName.value.trim();
+            if (!text) {
+                audioShowToast('请填写文本内容', 'error');
+                return;
+            }
+            audioRows.push({ text, filename });
+            audioNewRowText.value = '';
+            audioNewRowName.value = '';
+            audioNewRowText.focus();
+            audioRenderList();
+        }
+        
+        function audioRemoveRow(idx) {
+            audioRows.splice(idx, 1);
+            audioRenderList();
+        }
+        
+        // 绑定回车键添加
+        if (audioNewRowText && audioNewRowName) {
+            [audioNewRowText, audioNewRowName].forEach(input => {
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        audioAddRow();
+                    }
+                });
+            });
+        }
+        
+        // 单行试听
+        function audioPreviewRow(idx) {
+            const row = audioRows[idx];
+            if (!row || !row.text) {
+                audioShowToast('该行为空', 'error');
+                return;
+            }
+            const rowEl = document.getElementById(`audio-row-${idx}`);
+            const btn = rowEl ? rowEl.querySelector('.audio-preview-btn') : null;
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> 加载中';
+            }
+            
+            const params = audioGetParams();
+            
+            fetch('/audio/api/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: row.text, ...params })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('生成失败');
+                return res.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                audioElement.src = url;
+                audioTitle.textContent = row.filename
+                    ? `${row.filename}.${params.format}`
+                    : `${row.text.substring(0, 20)}${row.text.length > 20 ? '...' : ''}`;
+                audioPlayer.style.display = 'block';
+                audioElement.play();
+                if (btn) {
+                    btn.innerHTML = '<i class="fa fa-play"></i> 试听';
+                }
+            })
+            .catch(err => {
+                audioShowToast('试听失败: ' + err.message, 'error');
+            })
+            .finally(() => {
+                if (btn) btn.disabled = false;
+            });
+        }
+        
+        function audioShowToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'audio-toast ' + type;
+            toast.innerHTML = `<i class="fa fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i> ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        // 批量生成
+        function audioGenerate() {
+            const splitLines = document.getElementById('audioSplitLines')?.checked || true;
+            const template = 'output_{序号}';
+            const params = audioGetParams();
+            
+            if (audioRows.length === 0) {
+                audioShowToast('请先添加文本', 'error');
+                return;
+            }
+            
+            audioProgressBar.style.display = 'block';
+            audioProgressFill.style.width = '20%';
+            
+            if (splitLines) {
+                audioStatusText.innerHTML = `<i class="fa fa-microphone"></i> 正在批量生成 ${audioRows.length} 个语音文件（${params.format}）...`;
+                
+                // 判断是否存在自定义文件名
+                const hasCustom = audioRows.some(r => (r.filename || '').trim());
+                const apiUrl = hasCustom ? '/audio/api/custom-batch' : '/audio/api/batch';
+                
+                const bodyData = hasCustom
+                    ? {
+                        items: audioRows.map(r => ({ text: r.text, filename: r.filename || '' })),
+                        ...params,
+                        default_template: template
+                    }
+                    : {
+                        lines: audioRows.map(r => r.text),
+                        ...params,
+                        filename: template
+                    };
+                
+                fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                })
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(data => {
+                            throw new Error(data.error || '生成失败');
+                        }).catch(() => {
+                            throw new Error('生成失败');
+                        });
+                    }
+                    audioProgressFill.style.width = '80%';
+                    return res.blob();
+                })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `tts_batch_${Date.now()}.zip`;
+                    a.click();
+                    audioProgressFill.style.width = '100%';
+                    audioStatusText.innerHTML = `<i class="fa fa-check-circle"></i> 已生成 ${audioRows.length} 个语音文件`;
+                    audioShowToast(`成功生成 ${audioRows.length} 个语音文件`, 'success');
+                })
+                .catch(err => {
+                    audioStatusText.innerHTML = `<i class="fa fa-exclamation-circle"></i> 生成失败: ${err.message}`;
+                    audioShowToast('生成失败: ' + err.message, 'error');
+                })
+                .finally(() => {
+                    setTimeout(() => {
+                        audioProgressBar.style.display = 'none';
+                        audioProgressFill.style.width = '0%';
+                    }, 1000);
+                });
+            } else {
+                const text = audioRows.map(r => r.text).join('\n');
+                audioStatusText.innerHTML = `<i class="fa fa-microphone"></i> 正在生成语音文件（${params.format}）...`;
+                
+                fetch('/audio/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, ...params, filename: template })
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error('生成失败');
+                    return res.blob();
+                })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `tts_${Date.now()}.${params.format}`;
+                    a.click();
+                    audioProgressFill.style.width = '100%';
+                    audioStatusText.innerHTML = '<i class="fa fa-check-circle"></i> 语音文件已生成并下载';
+                    audioShowToast('生成成功', 'success');
+                })
+                .catch(err => {
+                    audioStatusText.innerHTML = `<i class="fa fa-exclamation-circle"></i> 生成失败: ${err.message}`;
+                    audioShowToast('生成失败: ' + err.message, 'error');
+                })
+                .finally(() => {
+                    setTimeout(() => {
+                        audioProgressBar.style.display = 'none';
+                        audioProgressFill.style.width = '0%';
+                    }, 1000);
+                });
+            }
+        }
+        
+        // 初始化音频列表（仅在切换到音频处理页面时执行）
+        // audioRenderList();
+    </script>
+
+    <!-- 主体内容 -->
+    <main class="container mx-auto px-8 py-8">
+        <!-- 步骤1：文件上传 -->
+        <div id="step-1" class="flex flex-col lg:flex-row gap-8">
+            <!-- 左侧：文件上传区 -->
+            <div class="lg:w-2/3">
+                <!-- 文件上传卡片 -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                    <h2 class="text-xl font-bold text-dark mb-6">上传 TIA Portal DB 清单</h2>
+                    
+                    <!-- 上传区域 -->
+                    <div class="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
+                        <div class="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa fa-file-text-o text-4xl text-primary"></i>
+                        </div>
+                        <p class="text-lg font-medium text-dark mb-2">点击或将文件拖拽至此处</p>
+                        <p class="text-sm text-secondary mb-6">支持 .txt  / .xml 格式 (最大 20MB)</p>
+                        <form action="/upload" method="post" enctype="multipart/form-data">
+                            <input type="file" id="file" name="file" class="hidden" accept=".db,.scl,.xml">
+                            <button type="button" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors" onclick="document.getElementById('file').click()">
+                                浏览本地文件
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- 文件预览 -->
+                    <div class="mt-6">
+                        <div class="flex items-center mb-2">
+                            <input type="text" id="file-path" class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="已选择的文件路径">
+                            <button class="ml-2 bg-gray-100 border border-gray-300 px-4 py-2 rounded-md text-secondary hover:bg-gray-50">
+                                浏览
+                            </button>
+                        </div>
+                        <div class="border border-gray-300 rounded-md mt-2">
+                            <textarea id="file-content" class="w-full h-40 p-3 text-sm font-mono" placeholder="文件内容预览"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 操作提示 -->
+                <div class="bg-white rounded-lg shadow-sm p-6">
+                    <div class="flex items-start">
+                        <div class="text-amber-500 text-xl mr-4">
+                            <i class="fa fa-lightbulb-o"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-amber-500 mb-1">提示：</h3>
+                            <p class="text-sm text-amber-600">请确保 DB 块未启用"优化块访问"，否则无法准确计算偏移地址。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：配置参数 -->
+            <div class="lg:w-1/3">
+                <!-- 配置卡片 -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                    <h2 class="text-xl font-bold text-dark mb-6">转换配置参数</h2>
+                    
+                    <form id="config-form">
+                        <!-- 通道名称 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">通道名称</label>
+                            <input type="text" name="channel_name" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="以太网<192.168.10.11>">
+                        </div>
+                        
+                        <!-- 设备名称 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">设备名称</label>
+                            <input type="text" name="device_name" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="PLC1">
+                        </div>
+                        
+                        <!-- 驱动类型 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">驱动类型</label>
+                            <select name="driver" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                                <option value="S71500Tcp">S71500Tcp</option>
+                                <option value="S71200Tcp" selected>S71200Tcp</option>
+                                <option value="S7300Tcp">S7300Tcp</option>
+                                <option value="S7400Tcp">S7400Tcp</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 设备系列 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">设备系列</label>
+                            <select name="device_series" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                                <option value="S7-1500">S7-1500</option>
+                                <option value="S7-1200" selected>S7-1200</option>
+                                <option value="S7-300">S7-300</option>
+                                <option value="S7-400">S7-400</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 开始转换分析按钮 -->
+                        <button type="button" id="convert-btn" class="w-full bg-primary text-white px-6 py-3 rounded-md hover:bg-blue-600 transition-colors font-bold">
+                            开始转换分析
+                        </button>
+                        
+                        <!-- 起始TagID -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">起始TagID</label>
+                            <input type="number" name="start_tag_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="50000">
+                        </div>
+                        
+                        <!-- 默认DB号 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">默认DB号</label>
+                            <input type="number" name="db_number" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="3">
+                        </div>
+                        
+                        <!-- 分组名称 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">分组名称</label>
+                            <input type="text" name="tag_group" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="PLC1.Device">
+                        </div>
+                        
+                        <!-- 采集周期 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-bold text-secondary mb-2">采集周期(ms)</label>
+                            <input type="number" name="collect_interval" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="1000">
+                        </div>
+                        
+                        <!-- 历史间隔 -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-bold text-secondary mb-2">历史间隔(s)</label>
+                            <input type="number" name="his_interval" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="60">
+                        </div>                        
+
+                    </form>
+                </div>
+                
+
+            </div>
+        </div>
+        
+        <!-- 步骤2：转换分析 -->
+        <div id="step-2" class="hidden">
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h2 class="text-xl font-bold text-dark mb-6">转换分析</h2>
+                
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold">转换状态</h3>
+                        <span id="conversion-status" class="text-blue-600 font-medium">准备就绪</span>
+                    </div>
+                    
+                    <div class="border border-gray-200 rounded-md p-4 mb-4">
+                        <div class="flex items-center mb-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                            <span>文件已上传</span>
+                        </div>
+                        <div class="flex items-center mb-2">
+                            <div class="w-2 h-2 bg-gray-300 rounded-full mr-2"></div>
+                            <span>正在分析数据...</span>
+                        </div>
+                        <div class="flex items-center mb-2">
+                            <div class="w-2 h-2 bg-gray-300 rounded-full mr-2"></div>
+                            <span>正在转换点表...</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-2 h-2 bg-gray-300 rounded-full mr-2"></div>
+                            <span>转换完成</span>
+                        </div>
+                    </div>
+                    
+                    <button id="start-analysis-btn" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                        开始分析
+                    </button>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded-md">
+                    <h3 class="font-bold mb-2">分析结果</h3>
+                    <pre id="analysis-result" class="text-sm">请点击开始分析按钮</pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤3：检查核对 -->
+        <div id="step-3" class="hidden">
+            <!-- 统计仪表盘 -->
+            <main class="flex-grow p-6 space-y-6">
+                <!-- 数据卡片行 -->
+                <section class="grid grid-cols-4 gap-6">
+                    <div class="data-card p-6 flex items-center gap-4">
+                        <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
+                            <i class="fa fa-pie-chart text-3xl text-blue-600"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">总点位数量</p>
+                            <p class="text-2xl font-bold text-slate-800"></p>
+                        </div>
+                    </div>
+                    <div class="data-card p-6 flex items-center gap-4">
+                        <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                            <i class="fa fa-microchip text-3xl text-indigo-600"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">占用内存 (Bytes)</p>
+                            <p class="text-2xl font-bold text-slate-800"></p>
+                        </div>
+                    </div>
+                    <div class="data-card p-6 flex items-center gap-4">
+                        <div class="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center">
+                            <i class="fa fa-sitemap text-3xl text-teal-600"></i>
+                        </div>  
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">逻辑设备数</p>
+                            <p class="text-2xl font-bold text-slate-800"></p>
+                        </div>
+                    </div>
+                    <div class="data-card p-6 flex items-center gap-4 border-l-4 border-l-amber-400">
+                        <div class="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center">
+                            <i class="fa fa-exclamation-circle text-3xl text-amber-600"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">潜在地址冲突</p>
+                            <p class="text-2xl font-bold text-slate-800"></p>
+                        </div>
+                    </div>
+                </section>
+                <!-- 图表与表格混合区 -->
+                <section class="grid grid-cols-12 gap-6">
+                    <!-- 可视化图表 -->
+                    <div class="col-span-4 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <h3 class="text-sm font-bold text-slate-800 mb-4 flex justify-between items-center">
+                            变量类型分布
+                            <i class="fa fa-question-circle text-slate-300"></i>
+                        </h3>
+                        <div class="w-full h-64" id="typeDistChart"></div>
+                        <div class="mt-4 grid grid-cols-2 gap-4">
+                        </div>
+                    </div>
+                    <!-- 数据表格 -->
+                    <div class="col-span-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <h3 class="text-sm font-bold text-slate-800">转换点位列表 (详细)</h3>
+                                <div class="relative">
+                                    <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                    <input class="pl-10 pr-4 py-1.5 text-xs border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" placeholder="搜索变量名/地址..." type="text"/>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><i class="fa fa-filter"></i></button>
+                                <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><i class="fa fa-cog"></i></button>
+                            </div>
+                        </div>
+                        <div class="table-container scrollbar-hide">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-50 sticky top-0 z-10 text-slate-500 uppercase font-semibold">
+                                    <tr>
+                                        <th class="px-6 py-4">序号</th>
+                                        <th class="px-6 py-4">TagID</th>
+                                        <th class="px-6 py-4">TagName</th>
+                                        <th class="px-6 py-4">Description</th>
+                                        <th class="px-6 py-4">TagDataType</th>
+                                        <th class="px-6 py-4">ItemName</th>
+                                        <th class="px-6 py-4 text-center">状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-50 text-slate-700">
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- 表格底部 -->
+                        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                            <p class="text-[10px] text-slate-400"></p>
+                            <div class="flex gap-1">
+                                <!-- 显示所有数据，不再需要分页按钮 -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+            
+            <div class="flex justify-between p-6">
+                <button id="back-to-analysis-btn" class="bg-gray-100 border border-gray-300 px-6 py-2 rounded-md text-secondary hover:bg-gray-50">
+                    返回分析
+                </button>
+                <button id="proceed-to-export-btn" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                    继续导出
+                </button>
+            </div>
+        </div>
+        
+            <!-- 步骤4：导出 -->
+            <div id="step-4" class="hidden">
+                <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                    <h2 class="text-xl font-bold text-dark mb-6">导出结果</h2>
+                    
+                    <div class="mb-6">
+                        <h3 class="font-bold mb-4">导出选项</h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-center">
+                                <input type="radio" id="export-csv" name="export-format" value="csv" checked class="mr-2">
+                                <label for="export-csv">CSV 格式</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="radio" id="export-excel" name="export-format" value="excel" class="mr-2">
+                                <label for="export-excel">Excel 格式（单Sheet）</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="radio" id="export-excel-multi" name="export-format" value="excel-multi" class="mr-2">
+                                <label for="export-excel-multi">Excel 格式（多Sheet）</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="radio" id="export-json" name="export-format" value="json" class="mr-2">
+                                <label for="export-json">JSON 格式</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="font-bold mb-4">导出设置</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-secondary mb-2">文件名</label>
+                                <input type="text" id="export-filename" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" value="conversion_result">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-secondary mb-2">编码格式</label>
+                                <select id="export-encoding" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                                    <option value="gbk">GBK</option>
+                                    <option value="utf-8">UTF-8</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                        <button id="back-to-check-btn" class="bg-gray-100 border border-gray-300 px-6 py-2 rounded-md text-secondary hover:bg-gray-50">
+                            返回核对
+                        </button>
+                        <button id="download-btn" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                            下载文件
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 音频处理工具页面 -->
+        <div id="audio-tool-page" class="container mx-auto px-8 py-8 hidden">
+            <!-- 语音参数区 -->
+            <div class="audio-card">
+                <h2><i class="fa fa-cog"></i> 语音参数</h2>
+                <div class="audio-settings-grid">
+                    <div class="audio-setting-item">
+                        <label>语音角色</label>
+                        <select id="audio-voice">
+                            <option value="xiaoxiao">晓晓 (中文女声)</option>
+                            <option value="xiaoyi">晓伊 (中文女声)</option>
+                            <option value="yunjian">云健 (中文男声)</option>
+                            <option value="yunyang">云扬 (中文男声)</option>
+                            <option value="yunxi">云夕 (中文女声)</option>
+                            <option value="yunze">云泽 (中文男声)</option>
+                            <option value="xiaoxiao-multi">晓晓-多语言</option>
+                        </select>
+                    </div>
+                    
+                    <div class="audio-setting-item">
+                        <label>语速</label>
+                        <select id="audio-rate">
+                            <option value="-50%">极慢</option>
+                            <option value="-25%">慢</option>
+                            <option value="+0%" selected>正常</option>
+                            <option value="+25%">快</option>
+                            <option value="+50%">极快</option>
+                        </select>
+                    </div>
+                    
+                    <div class="audio-setting-item">
+                        <label>音量</label>
+                        <select id="audio-volume">
+                            <option value="-20%">很小声</option>
+                            <option value="-10%">小声</option>
+                            <option value="+0%" selected>正常</option>
+                            <option value="+10%">大声</option>
+                            <option value="+20%">很响亮</option>
+                        </select>
+                    </div>
+                    
+                    <div class="audio-setting-item">
+                        <label>输出文件格式</label>
+                        <select id="audio-format">
+                            <option value="mp3">MP3 (体积小, 通用)</option>
+                            <option value="wav">WAV (无损, 体积大)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 文本列表区 -->
+            <div class="audio-card">
+                <h2><i class="fa fa-list"></i> 文本列表 <span class="audio-line-count-badge" id="audioLineCount">0 行</span></h2>
+                
+                <div class="audio-text-list-wrapper">
+                    <div class="audio-text-list" id="audioTextList">
+                        <!-- 列表由 JS 动态渲染 -->
+                    </div>
+                </div>
+                
+                <div class="audio-add-row-section">
+                    <input type="text" id="audioNewRowText" placeholder="文本内容" />
+                    <input type="text" id="audioNewRowName" placeholder="文件名（可选）" style="flex: 0.8" />
+                    <button onclick="audioAddRow()"><i class="fa fa-plus"></i> 添加</button>
+                </div>
+                
+                <div class="audio-upload-section">
+                    <label class="audio-download-label">
+                        <i class="fa fa-download"></i> 下载Excel模板
+                        <a href="/audio/api/download-template" id="audioTemplateDownload" download></a>
+                    </label>
+                    <label class="audio-file-label">
+                        <i class="fa fa-file-excel-o"></i> 上传Excel文件
+                        <input type="file" id="audioExcelFile" accept=".xlsx,.xls">
+                    </label>
+                    <span style="color: #666; font-size: 0.9em;">支持 .xlsx，自动识别「文本」「文件名」列</span>
+                </div>
+                
+                <div class="audio-excel-tip">
+                    <strong><i class="fa fa-info-circle"></i> Excel 格式说明：</strong><br>
+                    • <strong>第1行（表头）</strong>：写 <code>文本</code> 和 <code>文件名</code>（可多列，系统自动识别）<br>
+                    • <strong>第2行起</strong>：每行填写一条文本；若填了"文件名"，则使用该名称，否则按模板自动生成<br>
+                    • <strong>示例：</strong>「生化池（东）_厌氧推流器1号_综合故障」→ 生成「BIO_M0201_A_TFLT.mp3」
+                </div>
+                
+                <div class="audio-detect-info" id="audioDetectInfo">
+                    <strong><i class="fa fa-target"></i> 列识别结果：</strong>
+                    <span id="audioDetectContent"></span>
+                </div>
+                
+                <div class="audio-options-row">
+                    <label class="audio-checkbox-item">
+                        <input type="checkbox" id="audioSplitLines" checked>
+                        <span>每行生成一个独立语音文件（批量模式）</span>
+                    </label>
+                </div>
+                
+                <div style="margin-top: 25px; display: flex; gap: 15px;">
+                    <button class="audio-btn audio-btn-primary" onclick="audioGenerate()">
+                        <i class="fa fa-microphone"></i> 批量生成语音文件
+                    </button>
+                </div>
+                
+                <div class="audio-status-area" id="audioStatusArea">
+                    <div id="audioStatusText"><i class="fa fa-star"></i> 准备就绪，输入文本后点击"生成语音"按钮</div>
+                    <div class="audio-progress-bar" id="audioProgressBar">
+                        <div class="audio-progress-fill" id="audioProgressFill"></div>
+                    </div>
+                </div>
+                
+                <div class="audio-player-card" id="audioPlayer">
+                    <div class="label"><i class="fa fa-music"></i> 当前试听：<span id="audioTitle"></span></div>
+                    <audio id="audioElement" controls>您的浏览器不支持音频播放</audio>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white shadow-sm py-4 mt-8">
+        <div class="container mx-auto px-8 text-center">
+            <p class="text-sm text-secondary">© 2026 工业自动化点表工具 - 助力工程师实现效率飞跃</p>
+        </div>
+    </footer>
+
+    <!-- 开发者信息窗口 -->
+    <div id="developer-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto relative" style="background-image: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px); background-size: 20px 20px;">
+            <!-- 顶部蓝色圆点 -->
+            <div class="absolute top-6 left-6 w-3 h-3 bg-blue-500 rounded-full"></div>
+            
+            <div class="p-8 pt-12">
+                <h2 class="text-2xl font-bold text-gray-900 mb-8">开发者信息</h2>
+                
+                <div class="flex flex-col md:flex-row gap-12">
+                    <!-- 左侧：开发者信息 -->
+                    <div class="md:w-1/2">
+                        <div class="space-y-4">
+                            <div class="flex items-start">
+                                <span class="font-bold text-gray-700 w-24">姓名：</span>
+                                <span class="text-gray-900">ZHONGCANXIAO</span>
+                            </div>
+                            <div class="flex items-start">
+                                <span class="font-bold text-gray-700 w-24">职位：</span>
+                                <span class="text-gray-900">自控开发工程师</span>
+                            </div>
+                            <div class="flex items-start">
+                                <span class="font-bold text-gray-700 w-24">邮箱：</span>
+                                <span class="text-gray-900">b_m82a1@163.com</span>
+                            </div>
+                            <div class="flex items-start">
+                                <span class="font-bold text-gray-700 w-24">个人网站：</span>
+                                <span class="text-gray-900">NULL</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 右侧：代码示例 -->
+                    <div class="md:w-1/2">
+                        <div class="bg-white p-4 rounded-lg border border-blue-200 shadow-lg" style="background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);">
+                            <pre class="text-sm font-mono text-gray-800">function helloWorld() {
+  console.log('Hello, Developer!');
+}</pre>
+                            <div class="mt-2 text-blue-500 font-bold">▶</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 border-t flex justify-end">
+                <button id="close-developer-modal" class="bg-gray-100 border border-gray-300 px-6 py-2 rounded-md text-gray-700 hover:bg-gray-50">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结果模态框 -->
+    <div id="result-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div class="p-6 border-b">
+                <h2 class="text-xl font-bold text-dark">转换结果</h2>
+            </div>
+            <div class="p-6">
+                <!-- 统计信息 -->
+                <div class="bg-gray-50 p-4 rounded-md mb-6">
+                    <h3 class="font-bold mb-2">统计信息</h3>
+                    <pre id="stats" class="text-sm"></pre>
+                </div>
+                
+                <!-- 结果表格 -->
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="border p-2 text-left">TagID</th>
+                                <th class="border p-2 text-left">TagName</th>
+                                <th class="border p-2 text-left">Description</th>
+                                <th class="border p-2 text-left">TagDataType</th>
+                                <th class="border p-2 text-left">ItemName</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-table">
+                            <!-- 结果将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="p-6 border-t flex justify-between">
+                <a href="/download" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors">
+                    导出CSV
+                </a>
+                <button id="close-modal" class="bg-gray-100 border border-gray-300 px-6 py-2 rounded-md text-secondary hover:bg-gray-50">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

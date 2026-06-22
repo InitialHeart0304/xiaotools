@@ -1,0 +1,14 @@
+[
+    {
+        "id": 1,
+        "username": "ZHONGCANXIAO",
+        "password": "123456",
+        "email": "ZHONGCANXIAO@BEWG.COM"
+    },
+    {
+        "id": 2,
+        "username": "admin",
+        "password": "admin",
+        "email": "user@example.com"
+    }
+]
