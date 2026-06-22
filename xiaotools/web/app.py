@@ -517,10 +517,6 @@ def download():
 
 @app.route('/audio/api/preview', methods=["POST"])
 def audio_api_preview():
-    # 音频处理工具不需要登录
-    # if not check_login():
-    #     return jsonify({'error': '请先登录'}), 401
-        
     data = request.json
     text = (data.get("text") or "").strip()
     voice_key = data.get("voice", "xiaoxiao")
@@ -537,8 +533,20 @@ def audio_api_preview():
     try:
         audio_file, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
         print(f"[Audio Preview] Generated file: {audio_file}, format: {actual_fmt}")
+        
+        with open(audio_file, 'rb') as f:
+            audio_data = f.read()
+        
+        try:
+            os.unlink(audio_file)
+        except OSError:
+            pass
+        
+        buffer = io.BytesIO(audio_data)
+        buffer.seek(0)
+        
         mime = "audio/wav" if actual_fmt == "wav" else "audio/mpeg"
-        return send_file(audio_file, mimetype=mime)
+        return send_file(buffer, mimetype=mime, as_attachment=False)
     except Exception as e:
         print(f"[Audio Preview Error] {type(e).__name__}: {str(e)}")
         import traceback
@@ -547,10 +555,6 @@ def audio_api_preview():
 
 @app.route('/audio/api/batch', methods=["POST"])
 def audio_api_batch():
-    # 音频处理工具不需要登录
-    # if not check_login():
-    #     return jsonify({'error': '请先登录'}), 401
-        
     data = request.json
     lines = [l.strip() for l in data.get("lines", []) if l and l.strip()]
     voice_key = data.get("voice", "xiaoxiao")
@@ -564,7 +568,7 @@ def audio_api_batch():
     
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     total = len(lines)
-    generated_files = []
+    generated_audio = []
     used_names = set()
     
     for i, line in enumerate(lines, 1):
@@ -578,22 +582,26 @@ def audio_api_batch():
                 n += 1
             used_names.add(final_name)
             out_name = f"{final_name}.{actual_fmt}"
-            out_path = AUDIO_OUTPUT_DIR / out_name
-            with open(audio_file, "rb") as src, open(out_path, "wb") as dst:
-                dst.write(src.read())
-            try: os.unlink(audio_file)
-            except OSError: pass
-            generated_files.append(str(out_path))
+            
+            with open(audio_file, "rb") as f:
+                audio_data = f.read()
+            
+            try:
+                os.unlink(audio_file)
+            except OSError:
+                pass
+            
+            generated_audio.append((out_name, audio_data))
         except Exception as e:
             print(f"第{i}行生成失败: {e}")
     
-    if not generated_files:
+    if not generated_audio:
         return jsonify({"error": "所有文件都生成失败"}), 500
     
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in generated_files:
-            zf.write(f, arcname=os.path.basename(f))
+        for name, data in generated_audio:
+            zf.writestr(name, data)
     zip_buffer.seek(0)
     filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
     return send_file(zip_buffer, mimetype="application/zip",
@@ -602,10 +610,6 @@ def audio_api_batch():
 
 @app.route('/audio/api/custom-batch', methods=["POST"])
 def audio_api_custom_batch():
-    # 音频处理工具不需要登录
-    # if not check_login():
-    #     return jsonify({'error': '请先登录'}), 401
-        
     try:
         data = request.json
         items = data.get("items", [])
@@ -620,7 +624,7 @@ def audio_api_custom_batch():
         
         voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
         total = len(items)
-        generated_files = []
+        generated_audio = []
         used_names = set()
         
         for i, item in enumerate(items, 1):
@@ -639,22 +643,26 @@ def audio_api_custom_batch():
                     n += 1
                 used_names.add(final_name)
                 out_name = f"{final_name}.{actual_fmt}"
-                out_path = AUDIO_OUTPUT_DIR / out_name
-                with open(audio_file, "rb") as src, open(out_path, "wb") as dst:
-                    dst.write(src.read())
-                try: os.unlink(audio_file)
-                except OSError: pass
-                generated_files.append(str(out_path))
+                
+                with open(audio_file, "rb") as f:
+                    audio_data = f.read()
+                
+                try:
+                    os.unlink(audio_file)
+                except OSError:
+                    pass
+                
+                generated_audio.append((out_name, audio_data))
             except Exception as e:
                 print(f"  第{i}行失败: {e}")
         
-        if not generated_files:
+        if not generated_audio:
             return jsonify({"error": "所有文件都生成失败"}), 500
         
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for f in generated_files:
-                zf.write(f, arcname=os.path.basename(f))
+            for name, audio_data in generated_audio:
+                zf.writestr(name, audio_data)
         zip_buffer.seek(0)
         filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         return send_file(zip_buffer, mimetype="application/zip",
