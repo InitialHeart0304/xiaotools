@@ -336,8 +336,9 @@ def _build_xlsx(headers, rows):
 
 @app.route('/')
 def index():
-    if not check_login():
-        return redirect(url_for('login'))
+    # 移除登录检查，允许未登录用户访问音频处理功能
+    # if not check_login():
+    #     return redirect(url_for('login'))
     
     current_date = datetime.now().strftime("%Y年%m月%d日")
     current_user = session.get('username', '')
@@ -527,15 +528,21 @@ def audio_api_preview():
     volume = data.get("volume", "+0%")
     fmt = data.get("format", "mp3")
     
+    print(f"[Audio Preview] text={text[:50]}, voice={voice_key}, rate={rate}, volume={volume}, fmt={fmt}")
+    
     if not text:
         return jsonify({"error": "文本不能为空"}), 400
     
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     try:
         audio_file, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
+        print(f"[Audio Preview] Generated file: {audio_file}, format: {actual_fmt}")
         mime = "audio/wav" if actual_fmt == "wav" else "audio/mpeg"
         return send_file(audio_file, mimetype=mime)
     except Exception as e:
+        print(f"[Audio Preview Error] {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/audio/api/batch', methods=["POST"])
