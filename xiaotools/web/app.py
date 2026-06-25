@@ -51,8 +51,19 @@ current_result = None
 def check_ffmpeg_available():
     try:
         import shutil
-        return shutil.which("ffmpeg") is not None
-    except Exception:
+        # 检查ffmpeg是否可用
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path:
+            # 如果找到ffmpeg，配置pydub使用它
+            try:
+                from pydub import AudioSegment
+                AudioSegment.converter = ffmpeg_path
+            except ImportError:
+                pass
+            return True
+        return False
+    except Exception as e:
+        print(f"[Init] ffmpeg check error: {e}")
         return False
 
 FFMPEG_AVAILABLE = check_ffmpeg_available()
@@ -154,24 +165,34 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
             buffer.seek(0)
             return buffer, "mp3"
         
+        # WAV格式需要ffmpeg
         if not FFMPEG_AVAILABLE:
             raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
         
         try:
             from pydub import AudioSegment
+            print(f"[WAV] Converting MP3 to WAV, mp3_path={mp3_path}")
+            
+            # 使用pydub转换
             audio = AudioSegment.from_file(mp3_path, format="mp3")
             fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
             os.close(fd)
             audio.export(wav_path, format="wav")
+            
+            print(f"[WAV] Conversion successful, wav_path={wav_path}")
             
             with open(wav_path, 'rb') as f:
                 data = f.read()
             buffer = io.BytesIO(data)
             buffer.seek(0)
             return buffer, "wav"
-        except ImportError:
+        except ImportError as e:
+            print(f"[WAV] ImportError: {e}")
             raise Exception("pydub库未安装，无法转换为WAV格式")
         except Exception as e:
+            print(f"[WAV] Conversion error: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"WAV格式转换失败: {str(e)}")
     finally:
         try:
