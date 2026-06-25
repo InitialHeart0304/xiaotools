@@ -901,6 +901,21 @@
                     });
                 }
                 
+                // 检查服务器状态
+                fetch('/audio/api/status')
+                    .then(res => res.json())
+                    .then(data => {
+                        const formatSelect = document.getElementById('audio-format');
+                        if (formatSelect && data.ffmpeg_available === false) {
+                            const wavOption = formatSelect.querySelector('option[value="wav"]');
+                            if (wavOption) {
+                                wavOption.disabled = true;
+                                wavOption.textContent = 'WAV (服务器不支持, 请使用MP3)';
+                            }
+                        }
+                    })
+                    .catch(err => console.log('获取状态失败:', err));
+                
                 if (audioTextList) {
                     console.log('调用 audioRenderList()');
                     audioRenderList();
@@ -2247,6 +2262,13 @@
                 body: JSON.stringify({ text: row.text, ...params })
             })
             .then(res => {
+                // 先检查Content-Type，如果是JSON则说明是错误响应
+                const contentType = res.headers.get('Content-Type') || '';
+                if (contentType.includes('application/json')) {
+                    return res.json().then(data => {
+                        throw new Error(data.error || '生成失败');
+                    });
+                }
                 if (!res.ok) throw new Error('生成失败');
                 return res.blob();
             })
@@ -2317,13 +2339,14 @@
                     body: JSON.stringify(bodyData)
                 })
                 .then(res => {
-                    if (!res.ok) {
+                    // 先检查Content-Type，如果是JSON则说明是错误响应
+                    const contentType = res.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
                         return res.json().then(data => {
                             throw new Error(data.error || '生成失败');
-                        }).catch(() => {
-                            throw new Error('生成失败');
                         });
                     }
+                    if (!res.ok) throw new Error('生成失败');
                     audioProgressFill.style.width = '80%';
                     return res.blob();
                 })
@@ -2357,6 +2380,13 @@
                     body: JSON.stringify({ text, ...params, filename: template })
                 })
                 .then(res => {
+                    // 先检查Content-Type，如果是JSON则说明是错误响应
+                    const contentType = res.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
+                        return res.json().then(data => {
+                            throw new Error(data.error || '生成失败');
+                        });
+                    }
                     if (!res.ok) throw new Error('生成失败');
                     return res.blob();
                 })
