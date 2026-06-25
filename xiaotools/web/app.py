@@ -48,9 +48,15 @@ USERS_FILE = os.path.join(app.root_path, 'data', 'users.json')
 TEMP_DIR = tempfile.gettempdir()
 current_result = None
 
-# 音频处理工具配置
-AUDIO_OUTPUT_DIR = Path(__file__).parent.parent.parent / "wav tool" / "output"
-AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+def check_ffmpeg_available():
+    try:
+        import shutil
+        return shutil.which("ffmpeg") is not None
+    except Exception:
+        return False
+
+FFMPEG_AVAILABLE = check_ffmpeg_available()
+print(f"[Init] ffmpeg available: {FFMPEG_AVAILABLE}")
 
 VOICES = {
     "xiaoxiao": ("晓晓 (中文女声)", "zh-CN-XiaoxiaoNeural"),
@@ -118,14 +124,13 @@ def preprocess_text(text: str) -> str:
     return text
 
 def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
-    """生成音频，返回 (临时文件路径, 实际格式)"""
+    """生成音频，返回 (BytesIO对象, 实际格式)"""
     fmt = fmt.lower().strip() if fmt else "mp3"
     if fmt not in ("mp3", "wav"):
         fmt = "mp3"
     
     text = preprocess_text(text)
     
-    # 在 Windows Python 3.9 上修复 event loop 问题
     try:
         loop = asyncio.get_event_loop()
         if loop.is_closed():
@@ -134,6 +139,8 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     
+    mp3_path = None
+    wav_path = None
     try:
         communicate = edge_tts.Communicate(text, voice_code, rate=rate, volume=volume)
         fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_")
@@ -141,7 +148,14 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
         loop.run_until_complete(communicate.save(mp3_path))
         
         if fmt == "mp3":
-            return mp3_path, "mp3"
+            with open(mp3_path, 'rb') as f:
+                data = f.read()
+            buffer = io.BytesIO(data)
+            buffer.seek(0)
+            return buffer, "mp3"
+        
+        if not FFMPEG_AVAILABLE:
+            raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
         
         try:
             from pydub import AudioSegment
@@ -149,16 +163,27 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
             fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
             os.close(fd)
             audio.export(wav_path, format="wav")
-            try: os.unlink(mp3_path)
-            except OSError: pass
-            return wav_path, "wav"
-        except Exception:
-            return mp3_path, "mp3"
+            
+            with open(wav_path, 'rb') as f:
+                data = f.read()
+            buffer = io.BytesIO(data)
+            buffer.seek(0)
+            return buffer, "wav"
+        except ImportError:
+            raise Exception("pydub库未安装，无法转换为WAV格式")
+        except Exception as e:
+            raise Exception(f"WAV格式转换失败: {str(e)}")
     finally:
         try:
             loop.close()
         except Exception:
             pass
+        for p in [mp3_path, wav_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
 
 def detect_columns(headers):
     """智能识别文本列和文件名列的位置"""
@@ -515,6 +540,14 @@ def download():
 
 # ==================== 音频处理工具API路由 ====================
 
+@app.route('/audio/api/status', methods=["GET"])
+def audio_api_status():
+    return jsonify({
+        "edge_tts_available": edge_tts is not None,
+        "ffmpeg_available": FFMPEG_AVAILABLE,
+        "supported_formats": ["mp3"] + (["wav"] if FFMPEG_AVAILABLE else []),
+    })
+
 @app.route('/audio/api/preview', methods=["POST"])
 def audio_api_preview():
     data = request.json
@@ -531,22 +564,11 @@ def audio_api_preview():
     
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     try:
-        audio_file, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
-        print(f"[Audio Preview] Generated file: {audio_file}, format: {actual_fmt}")
-        
-        with open(audio_file, 'rb') as f:
-            audio_data = f.read()
-        
-        try:
-            os.unlink(audio_file)
-        except OSError:
-            pass
-        
-        buffer = io.BytesIO(audio_data)
-        buffer.seek(0)
+        audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
+        print(f"[Audio Preview] Generated format: {actual_fmt}")
         
         mime = "audio/wav" if actual_fmt == "wav" else "audio/mpeg"
-        return send_file(buffer, mimetype=mime, as_attachment=False)
+        return send_file(audio_buffer, mimetype=mime, as_attachment=False)
     except Exception as e:
         print(f"[Audio Preview Error] {type(e).__name__}: {str(e)}")
         import traceback
@@ -573,7 +595,7 @@ def audio_api_batch():
     
     for i, line in enumerate(lines, 1):
         try:
-            audio_file, actual_fmt = generate_audio_sync(line, voice_code, rate, volume, fmt)
+            audio_buffer, actual_fmt = generate_audio_sync(line, voice_code, rate, volume, fmt)
             base_name = format_filename(filename_template, i, line, total)
             final_name = base_name
             n = 1
@@ -583,15 +605,7 @@ def audio_api_batch():
             used_names.add(final_name)
             out_name = f"{final_name}.{actual_fmt}"
             
-            with open(audio_file, "rb") as f:
-                audio_data = f.read()
-            
-            try:
-                os.unlink(audio_file)
-            except OSError:
-                pass
-            
-            generated_audio.append((out_name, audio_data))
+            generated_audio.append((out_name, audio_buffer.getvalue()))
         except Exception as e:
             print(f"第{i}行生成失败: {e}")
     
@@ -633,7 +647,7 @@ def audio_api_custom_batch():
             if not text:
                 continue
             try:
-                audio_file, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
+                audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
                 base_name = sanitize_filename(custom_name) if custom_name \
                     else format_filename(default_template, i, text, total)
                 final_name = base_name
@@ -644,15 +658,7 @@ def audio_api_custom_batch():
                 used_names.add(final_name)
                 out_name = f"{final_name}.{actual_fmt}"
                 
-                with open(audio_file, "rb") as f:
-                    audio_data = f.read()
-                
-                try:
-                    os.unlink(audio_file)
-                except OSError:
-                    pass
-                
-                generated_audio.append((out_name, audio_data))
+                generated_audio.append((out_name, audio_buffer.getvalue()))
             except Exception as e:
                 print(f"  第{i}行失败: {e}")
         
@@ -779,10 +785,10 @@ def audio_api_generate():
 
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     try:
-        audio_file, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
+        audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
         filename = format_filename(filename_template, 1, text, 1) + f".{actual_fmt}"
         mime = "audio/wav" if actual_fmt == "wav" else "audio/mpeg"
-        return send_file(audio_file, mimetype=mime, as_attachment=True, download_name=filename)
+        return send_file(audio_buffer, mimetype=mime, as_attachment=True, download_name=filename)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
