@@ -165,35 +165,43 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
             buffer.seek(0)
             return buffer, "mp3"
         
-        # WAV格式需要ffmpeg
         if not FFMPEG_AVAILABLE:
             raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
         
+        # 优先使用pydub
         try:
             from pydub import AudioSegment
-            print(f"[WAV] Converting MP3 to WAV, mp3_path={mp3_path}")
-            
-            # 使用pydub转换
+            print(f"[WAV] Using pydub for conversion")
             audio = AudioSegment.from_file(mp3_path, format="mp3")
             fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
             os.close(fd)
             audio.export(wav_path, format="wav")
-            
-            print(f"[WAV] Conversion successful, wav_path={wav_path}")
-            
-            with open(wav_path, 'rb') as f:
-                data = f.read()
-            buffer = io.BytesIO(data)
-            buffer.seek(0)
-            return buffer, "wav"
-        except ImportError as e:
-            print(f"[WAV] ImportError: {e}")
-            raise Exception("pydub库未安装，无法转换为WAV格式")
-        except Exception as e:
-            print(f"[WAV] Conversion error: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise Exception(f"WAV格式转换失败: {str(e)}")
+        except ImportError:
+            # pydub不可用时，直接调用ffmpeg命令行
+            print(f"[WAV] pydub not available, using subprocess")
+            import subprocess
+            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
+            os.close(fd)
+            result = subprocess.run(
+                ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                raise Exception(f"ffmpeg转换失败: {result.stderr}")
+        
+        print(f"[WAV] Conversion successful, wav_path={wav_path}")
+        
+        with open(wav_path, 'rb') as f:
+            data = f.read()
+        buffer = io.BytesIO(data)
+        buffer.seek(0)
+        return buffer, "wav"
+    except Exception as e:
+        print(f"[WAV] Conversion error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise Exception(f"WAV格式转换失败: {str(e)}")
     finally:
         try:
             loop.close()
