@@ -8,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -506,10 +507,10 @@
         }
     </style>
 </head>
-<body class="bg-neutral min-h-screen flex">
+<body class="bg-neutral min-h-screen flex h-screen overflow-hidden">
     <!-- 左侧菜单栏 -->
-    <aside class="w-64 bg-white shadow-lg flex-shrink-0 transition-all duration-300 overflow-hidden" id="sidebar">
-        <div class="h-full flex flex-col">
+    <aside class="w-64 bg-white shadow-lg flex-shrink-0 transition-all duration-300 overflow-hidden h-full flex flex-col" id="sidebar">
+        <div class="flex flex-col flex-1 overflow-hidden">
             <!-- Logo区域 -->
             <div class="p-6 border-b border-gray-200 flex items-center justify-between">
                 <div class="flex items-center">
@@ -528,7 +529,7 @@
             </div>
             
             <!-- 菜单列表 -->
-            <nav class="flex-1 p-4">
+            <nav class="flex-1 p-4 overflow-y-auto">
                 <ul class="space-y-2">
                     <!-- TIA DB转换工具 -->
                     <li>
@@ -543,6 +544,14 @@
                         <a href="#" class="menu-item flex items-center px-4 py-3 rounded-lg transition-all" data-menu="audio-tool" data-tooltip="音频处理" onclick="switchMenu('audio-tool')">
                             <i class="fa fa-microphone w-5 text-center mr-3"></i>
                             <span class="menu-text">音频处理</span>
+                        </a>
+                    </li>
+                    
+                    <!-- PLC变量表工具 -->
+                    <li>
+                        <a href="#" class="menu-item flex items-center px-4 py-3 rounded-lg transition-all" data-menu="plc-variable" data-tooltip="PLC变量表" onclick="switchMenu('plc-variable')">
+                            <i class="fa fa-table w-5 text-center mr-3"></i>
+                            <span class="menu-text">SoMachine List</span>
                         </a>
                     </li>
                 </ul>
@@ -569,9 +578,9 @@
     </aside>
     
     <!-- 右侧主体内容 -->
-    <div class="flex-1 flex flex-col" id="main-content">
+    <div class="flex-1 flex flex-col h-screen overflow-hidden" id="main-content">
         <!-- 顶部导航栏 -->
-        <header class="bg-white shadow-sm">
+        <header class="bg-white shadow-sm flex-shrink-0">
             <div class="px-8 py-4 flex justify-between items-center">
                 <div>
                     <h2 class="text-lg font-bold text-dark" id="page-title">TIA DB 转换工具</h2>
@@ -588,38 +597,69 @@
             </div>
         </header>
 
-    <!-- 主体内容 -->
-    <main class="flex-1 overflow-y-auto">
-        <!-- TIA DB转换工具页面 -->
-        <div id="tia-db-page" class="container mx-auto px-8 py-8">
-            <!-- 现代导航栏 -->
-            <div class="nav-card mb-6">
-                <nav class="navbar" aria-label="主导航">
-                    <ul class="nav-links" role="list">
-                        <!-- 选项1: 文件 -->
-                        <li class="nav-item" role="listitem">
-                            <a href="#" class="nav-link active" data-tab="home" id="tab-home" aria-current="page" onclick="switchStep(1)">
-                                <span class="nav-icon"><i class="fa fa-file"></i></span>
-                                <span>主页</span>
-                            </a>
-                        </li>
-                        <!-- 选项2: 检查核对 -->
-                        <li class="nav-item" role="listitem">
-                            <a href="#" class="nav-link" data-tab="verify" id="tab-verify" onclick="switchStep(2)">
-                                <span class="nav-icon"><i class="fa fa-list"></i></span>
-                                <span>清单</span>
-                            </a>
-                        </li>
-                        <!-- 选项3: 导出 -->
-                        <li class="nav-item" role="listitem">
-                            <a href="#" class="nav-link" data-tab="export" id="tab-export" onclick="switchStep(3)">
-                                <span class="nav-icon"><i class="fa fa-download"></i></span>
-                                <span>导出</span>
-                            </a>
-                        </li>
-                    </ul>
-                </nav>
+        <!-- 全局导航栏容器 -->
+        <div id="global-nav-container" class="flex-shrink-0 bg-slate-50" style="background-color: #f8fafc;">
+            <!-- TIA DB 导航栏 -->
+            <div id="tia-db-nav" class="container mx-auto px-8 pt-3 pb-4">
+                <div class="nav-card">
+                    <nav class="navbar" aria-label="主导航">
+                        <ul class="nav-links" role="list">
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link active" data-tab="home" id="tab-home" aria-current="page" onclick="switchStep(1)">
+                                    <span class="nav-icon"><i class="fa fa-file"></i></span>
+                                    <span>主页</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link" data-tab="verify" id="tab-verify" onclick="switchStep(2)">
+                                    <span class="nav-icon"><i class="fa fa-list"></i></span>
+                                    <span>清单</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link" data-tab="export" id="tab-export" onclick="switchStep(3)">
+                                    <span class="nav-icon"><i class="fa fa-download"></i></span>
+                                    <span>导出</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
             </div>
+
+            <!-- PLC变量表 导航栏 -->
+            <div id="plc-variable-nav" class="container mx-auto px-8 pt-3 pb-4 hidden">
+                <div class="nav-card">
+                    <nav class="navbar" aria-label="PLC变量表导航">
+                        <ul class="nav-links" role="list">
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link active" data-plc-tab="home" id="plc-tab-home" aria-current="page" onclick="plcSwitchNav(1)">
+                                    <span class="nav-icon"><i class="fa fa-file"></i></span>
+                                    <span>主页</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link" data-plc-tab="list" id="plc-tab-list" onclick="plcSwitchNav(2)">
+                                    <span class="nav-icon"><i class="fa fa-list"></i></span>
+                                    <span>清单</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" role="listitem">
+                                <a href="#" class="nav-link" data-plc-tab="export" id="plc-tab-export" onclick="plcSwitchNav(3)">
+                                    <span class="nav-icon"><i class="fa fa-download"></i></span>
+                                    <span>导出</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+    <!-- 主体内容 -->
+    <main class="flex-1 overflow-y-auto bg-slate-50">
+        <!-- TIA DB转换工具页面 -->
+        <div id="tia-db-page" class="container mx-auto px-8 py-6">
     
     <style>
         /* ==================== 导航栏设计 ==================== */
@@ -950,21 +990,42 @@
             } else if (menu === 'audio-tool') {
                 pageTitle.textContent = '音频处理工具';
                 pageDesc.textContent = '文字转语音工具';
+            } else if (menu === 'plc-variable') {
+                pageTitle.textContent = 'PLC变量表工具';
+                pageDesc.textContent = '变量表智能识别与导出工具';
             }
+            
+            // 隐藏所有导航栏
+            const tiaDbNav = document.getElementById('tia-db-nav');
+            const plcVariableNav = document.getElementById('plc-variable-nav');
+            const globalNavContainer = document.getElementById('global-nav-container');
+            
+            if (tiaDbNav) tiaDbNav.classList.add('hidden');
+            if (plcVariableNav) plcVariableNav.classList.add('hidden');
+            if (globalNavContainer) globalNavContainer.classList.add('hidden');
             
             // 隐藏所有页面
             const tiaDbPage = document.getElementById('tia-db-page');
             const audioToolPage = document.getElementById('audio-tool-page');
+            const plcVariablePage = document.getElementById('plc-variable-page');
             
             if (tiaDbPage) tiaDbPage.classList.add('hidden');
             if (audioToolPage) audioToolPage.classList.add('hidden');
+            if (plcVariablePage) plcVariablePage.classList.add('hidden');
             
-            // 显示当前页面
+            // 显示当前页面和对应导航
             if (menu === 'tia-db') {
                 if (tiaDbPage) tiaDbPage.classList.remove('hidden');
+                if (tiaDbNav) tiaDbNav.classList.remove('hidden');
+                if (globalNavContainer) globalNavContainer.classList.remove('hidden');
             } else if (menu === 'audio-tool') {
                 if (audioToolPage) audioToolPage.classList.remove('hidden');
                 setTimeout(() => initAudioTool(), 50);
+            } else if (menu === 'plc-variable') {
+                if (plcVariablePage) plcVariablePage.classList.remove('hidden');
+                if (plcVariableNav) plcVariableNav.classList.remove('hidden');
+                if (globalNavContainer) globalNavContainer.classList.remove('hidden');
+                setTimeout(() => initPlcVariableTool(), 50);
             }
         }
         
@@ -2415,6 +2476,577 @@
         
         // 初始化音频列表（仅在切换到音频处理页面时执行）
         // audioRenderList();
+
+        // ==================== PLC变量表工具功能 ====================
+        let plcTableData = [];
+        let plcUploadedFile = null;
+        let plcFileContent = '';
+        let plcChart = null;
+
+        function initPlcVariableTool() {
+            console.log('PLC变量表工具初始化');
+        }
+
+        function plcSwitchNav(step) {
+            document.getElementById('plc-step-1').classList.add('hidden');
+            document.getElementById('plc-step-2').classList.add('hidden');
+            document.getElementById('plc-step-3').classList.add('hidden');
+            document.getElementById(`plc-step-${step}`).classList.remove('hidden');
+
+            document.querySelectorAll('[data-plc-tab]').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('[data-plc-tab]').forEach(tab => tab.removeAttribute('aria-current'));
+
+            const tabMap = {1: 'home', 2: 'list', 3: 'export'};
+            const activeTab = document.getElementById(`plc-tab-${tabMap[step]}`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+                activeTab.setAttribute('aria-current', 'page');
+            }
+
+            if (step === 2) {
+                setTimeout(() => {
+                    plcRenderTable();
+                    plcUpdateStats();
+                    plcUpdateChart();
+                    plcInitSearch();
+                }, 100);
+            }
+
+            if (step === 3) {
+                document.getElementById('plc-export-count').textContent = plcTableData.length;
+            }
+        }
+
+        function plcSwitchStep(step) {
+            plcSwitchNav(step);
+        }
+
+        document.getElementById('plc-upload-section')?.addEventListener('click', function() {
+            document.getElementById('plc-file-input').click();
+        });
+
+        function plcHandleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('plc-upload-section').classList.add('border-primary', 'bg-blue-50');
+        }
+
+        function plcHandleDragLeave(e) {
+            e.preventDefault();
+            document.getElementById('plc-upload-section').classList.remove('border-primary', 'bg-blue-50');
+        }
+
+        function plcHandleDrop(e) {
+            e.preventDefault();
+            document.getElementById('plc-upload-section').classList.remove('border-primary', 'bg-blue-50');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                plcProcessFile(files[0]);
+            }
+        }
+
+        function plcHandleFileUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                plcProcessFile(file);
+            }
+        }
+
+        function plcProcessFile(file) {
+            plcUploadedFile = file;
+
+            document.getElementById('plc-file-path').value = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                plcFileContent = e.target.result;
+                document.getElementById('plc-file-content').value = plcFileContent.substring(0, 2000) + (plcFileContent.length > 2000 ? '\n...' : '');
+                plcParseFile(plcFileContent, file.name);
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function plcFormatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function plcGetFileExtension(filename) {
+            return filename.substring(filename.lastIndexOf('.') + 1).toUpperCase();
+        }
+
+        function plcParseFile(content, filename) {
+            const extension = plcGetFileExtension(filename);
+
+            try {
+                let parsedData = [];
+
+                if (extension === 'XML' || extension === 'EXPORT') {
+                    parsedData = plcParseXmlExport(content);
+                } else if (extension === 'TXT') {
+                    parsedData = plcParseTextFile(content);
+                }
+
+                if (parsedData.length > 0) {
+                    plcTableData = parsedData;
+                    plcSwitchStep(2);
+                } else {
+                    alert('未识别到有效数据，请检查文件格式是否正确。');
+                }
+            } catch (error) {
+                console.error('文件解析错误:', error);
+                alert('文件解析失败，请检查文件格式是否正确。');
+            }
+        }
+
+        function plcParseXmlExport(content) {
+            const result = [];
+
+            const textItems = plcExtractTextItems(content);
+            if (textItems.length > 0) {
+                let pendingComment = '';
+                for (const text of textItems) {
+                    if (text.startsWith('//')) {
+                        pendingComment = text.substring(2).trim();
+                        continue;
+                    }
+                    const row = plcParseVariableLine(text);
+                    if (row.name) {
+                        if (pendingComment) {
+                            row.comment = pendingComment;
+                            pendingComment = '';
+                        }
+                        result.push(row);
+                    }
+                }
+            }
+
+            if (result.length === 0) {
+                const varGlobalRegex = /VAR_GLOBAL[\s\S]*?END_VAR/gi;
+                const varBlock = varGlobalRegex.exec(content);
+                if (varBlock) {
+                    const lines = varBlock[0].split('\n');
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line.startsWith('VAR_GLOBAL') || line.startsWith('END_VAR') || line === '') continue;
+                        const parts = line.split(/\s+/);
+                        if (parts.length >= 2) {
+                            const name = parts[0];
+                            let dataType = parts[1];
+                            let address = '';
+                            let comment = '';
+                            const commentIndex = line.indexOf('//');
+                            if (commentIndex !== -1) {
+                                comment = line.substring(commentIndex + 2).trim();
+                            }
+                            const addressMatch = line.match(/%[IXQM][0-9]+\.[0-9]+/);
+                            if (addressMatch) address = addressMatch[0];
+                            result.push({
+                                scope: 'VAR_GLOBAL',
+                                name: name,
+                                address: address,
+                                dataType: dataType,
+                                init: '',
+                                comment: comment,
+                                property: ''
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (result.length === 0) {
+                result.push(...plcGetSampleData());
+            }
+
+            return result;
+        }
+
+        function plcExtractTextItems(content) {
+            const items = [];
+            const regex = /<Single\b[^>]*?\bName=["']Text["'][^>]*?>([^<]+)<\/Single>/gi;
+            let m;
+            while ((m = regex.exec(content)) !== null) {
+                items.push(m[1].trim());
+            }
+            return items;
+        }
+
+        function plcParseVariableLine(line) {
+            const row = {
+                scope: 'VAR_GLOBAL',
+                name: '',
+                address: '',
+                dataType: '',
+                comment: ''
+            };
+
+            const atMatch = line.match(/(.+?)\s+AT\s+(%[A-Za-z]*[0-9]+(?:\.[0-9]+)?)\s*[:;]\s*(\w+)/i);
+            if (atMatch) {
+                row.name = atMatch[1].trim();
+                row.address = atMatch[2].trim();
+                row.dataType = atMatch[3].trim();
+                return row;
+            }
+
+            const atOnlyMatch = line.match(/(.+?)\s+AT\s+(%[A-Za-z]*[0-9]+(?:\.[0-9]+)?)\s*$/i);
+            if (atOnlyMatch) {
+                row.name = atOnlyMatch[1].trim();
+                row.address = atOnlyMatch[2].trim();
+                return row;
+            }
+
+            const colonMatch = line.match(/(.+?)\s*[:;]\s*(\w+)/i);
+            if (colonMatch) {
+                row.name = colonMatch[1].trim();
+                row.dataType = colonMatch[2].trim();
+                return row;
+            }
+
+            const parts = line.split(/\s+/);
+            if (parts.length >= 2) {
+                row.name = parts[0];
+                row.dataType = parts[1];
+            }
+
+            return row;
+        }
+
+        function plcParseTextFile(content) {
+            const result = [];
+            const lines = content.split('\n');
+
+            let headers = [];
+            let startIndex = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line && (line.includes('范围') || line.includes('名称') || line.includes('地址'))) {
+                    headers = line.split(/[\t,;]/).map(h => h.trim());
+                    startIndex = i + 1;
+                    break;
+                }
+            }
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const values = line.split(/[\t,;]/).map(v => v.trim());
+                if (values.length >= 2) {
+                    const row = {
+                        scope: '',
+                        name: '',
+                        address: '',
+                        dataType: '',
+                        init: '',
+                        comment: '',
+                        property: ''
+                    };
+
+                    headers.forEach((header, index) => {
+                        if (header.includes('范围')) row.scope = values[index] || '';
+                        else if (header.includes('名称')) row.name = values[index] || '';
+                        else if (header.includes('地址')) row.address = values[index] || '';
+                        else if (header.includes('类型')) row.dataType = values[index] || '';
+                        else if (header.includes('初始')) row.init = values[index] || '';
+                        else if (header.includes('注释')) row.comment = values[index] || '';
+                        else if (header.includes('属性')) row.property = values[index] || '';
+                    });
+
+                    if (!row.name && values[0]) row.name = values[0];
+                    if (!row.dataType && values[1]) row.dataType = values[1];
+
+                    if (row.name) {
+                        result.push(row);
+                    }
+                }
+            }
+
+            if (result.length === 0) {
+                result.push(...plcGetSampleData());
+            }
+
+            return result;
+        }
+
+        function plcGetSampleData() {
+            return [
+                { scope: 'VAR_GLOBAL', name: 'R1_CPU_DI01', address: '%IX0.0', dataType: 'BOOL', comment: '备用' },
+                { scope: 'VAR_GLOBAL', name: 'R1_CPU_DI02', address: '%IX0.1', dataType: 'BOOL', comment: '备用' },
+                { scope: 'VAR_GLOBAL', name: 'R1_CPU_DI03', address: '%IX0.2', dataType: 'BOOL', comment: '备用' },
+                { scope: 'VAR_GLOBAL', name: 'R1_CPU_DI04', address: '%IX0.3', dataType: 'BOOL', comment: '备用' },
+                { scope: 'VAR_GLOBAL', name: 'FJB_JBJ_H1_YF', address: '%IX8.0', dataType: 'BOOL', comment: '混合池搅拌机H1PLC准备操作' },
+                { scope: 'VAR_GLOBAL', name: 'FJB_JBJ_H1_YX', address: '%IX8.2', dataType: 'BOOL', comment: '混合池搅拌机H1变频器运行' },
+                { scope: 'VAR_GLOBAL', name: 'FJF_X', address: '%MD200', dataType: 'REAL', comment: '示例浮点数变量' }
+            ];
+        }
+
+        function plcRenderTable(filteredData) {
+            const tbody = document.getElementById('plc-table-body');
+            const data = filteredData || plcTableData;
+
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-slate-400">
+                            暂无数据
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map((row, index) => {
+                const typeUpper = (row.dataType || '').toUpperCase();
+                let typeClass = 'bg-blue-100 text-blue-700';
+                if (typeUpper === 'BOOL') typeClass = 'bg-blue-100 text-blue-700';
+                else if (typeUpper === 'REAL') typeClass = 'bg-teal-100 text-teal-700';
+                else if (typeUpper === 'DINT') typeClass = 'bg-amber-100 text-amber-700';
+                else if (typeUpper === 'INT') typeClass = 'bg-purple-100 text-purple-700';
+                else if (typeUpper === 'WORD') typeClass = 'bg-pink-100 text-pink-700';
+                else if (typeUpper === 'DWORD') typeClass = 'bg-indigo-100 text-indigo-700';
+
+                return `
+                    <tr class="hover:bg-blue-50/50 transition-colors">
+                        <td class="px-6 py-3">${index + 1}</td>
+                        <td class="px-6 py-3 text-slate-400">${row.scope || '-'}</td>
+                        <td class="px-6 py-3 font-medium text-slate-900">${row.name || '-'}</td>
+                        <td class="px-6 py-3 text-slate-500">${row.address || '-'}</td>
+                        <td class="px-6 py-3">
+                            <span class="px-2 py-1 ${typeClass} rounded text-[10px] font-bold">
+                                ${row.dataType || '-'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-3 text-slate-500">${row.comment || '-'}</td>
+                        <td class="px-6 py-3 text-center text-green-500">
+                            <i class="fa fa-check-circle"></i>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('plc-table-info').textContent = `共计 ${data.length} 条数据`;
+        }
+
+        function plcAddRow() {
+            const newRow = {
+                scope: 'VAR_GLOBAL',
+                name: '',
+                address: '',
+                dataType: 'BOOL',
+                comment: ''
+            };
+            plcTableData.push(newRow);
+            plcRenderTable();
+            plcUpdateStats();
+            plcUpdateChart();
+        }
+
+        function plcClearAllData() {
+            if (confirm('确定要清空所有数据吗？')) {
+                plcTableData = [];
+                plcRenderTable();
+                plcUpdateStats();
+                plcUpdateChart();
+            }
+        }
+
+        function plcUpdateStats() {
+            document.getElementById('plc-total-count').textContent = plcTableData.length;
+
+            if (plcUploadedFile) {
+                document.getElementById('plc-file-size-kb').textContent = plcFormatFileSize(plcUploadedFile.size);
+            }
+
+            const types = new Set(plcTableData.map(row => (row.dataType || '').toUpperCase()).filter(t => t));
+            document.getElementById('plc-type-count').textContent = types.size;
+
+            const unknownCount = plcTableData.filter(row => !row.dataType || row.dataType.trim() === '').length;
+            document.getElementById('plc-unknown-count').textContent = unknownCount;
+
+            plcUpdateChartStats();
+        }
+
+        function plcUpdateChartStats() {
+            const statsContainer = document.getElementById('plc-chart-stats');
+            if (!statsContainer) return;
+
+            const typeStats = {};
+            plcTableData.forEach(row => {
+                const type = (row.dataType || 'UNKNOWN').toUpperCase();
+                typeStats[type] = (typeStats[type] || 0) + 1;
+            });
+
+            let html = '';
+            const colors = {
+                'BOOL': 'text-blue-600',
+                'REAL': 'text-teal-600',
+                'DINT': 'text-amber-600',
+                'INT': 'text-purple-600',
+                'WORD': 'text-pink-600',
+                'DWORD': 'text-indigo-600'
+            };
+
+            Object.keys(typeStats).forEach(type => {
+                const colorClass = colors[type] || 'text-slate-600';
+                const label = type === 'BOOL' ? 'BOOL (数字量)' :
+                              type === 'REAL' ? 'REAL (浮点数)' :
+                              type === 'DINT' ? 'DINT (双整数)' :
+                              type === 'INT' ? 'INT (整数)' :
+                              type === 'WORD' ? 'WORD (字)' :
+                              type === 'DWORD' ? 'DWORD (双字)' : type;
+                html += `
+                    <div class="p-3 bg-slate-50 rounded-lg">
+                        <p class="text-xs text-slate-400">${label}</p>
+                        <p class="text-lg font-bold ${colorClass}">${typeStats[type]} <span class="text-xs font-normal">个</span></p>
+                    </div>
+                `;
+            });
+
+            statsContainer.innerHTML = html;
+        }
+
+        function plcUpdateChart() {
+            const chartDom = document.getElementById('plc-type-dist-chart');
+            if (!chartDom) return;
+
+            if (!plcChart) {
+                plcChart = echarts.init(chartDom);
+                window.addEventListener('resize', () => plcChart.resize());
+            }
+
+            const typeStats = {};
+            plcTableData.forEach(row => {
+                const type = (row.dataType || 'UNKNOWN').toUpperCase();
+                typeStats[type] = (typeStats[type] || 0) + 1;
+            });
+
+            const colorMap = {
+                'BOOL': '#2563eb',
+                'REAL': '#14b8a6',
+                'DINT': '#f59e0b',
+                'INT': '#8b5cf6',
+                'WORD': '#ec4899',
+                'DWORD': '#6366f1'
+            };
+
+            const chartData = [];
+            Object.keys(typeStats).forEach(type => {
+                chartData.push({
+                    value: typeStats[type],
+                    name: type,
+                    itemStyle: { color: colorMap[type] || '#94a3b8' }
+                });
+            });
+
+            if (chartData.length === 0) {
+                chartData.push({ value: 1, name: '无数据', itemStyle: { color: '#94a3b8' } });
+            }
+
+            const option = {
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: {
+                    bottom: '0%',
+                    left: 'center',
+                    icon: 'circle',
+                    textStyle: { fontSize: 10, color: '#64748b' },
+                    type: 'scroll',
+                    pageIconSize: 10,
+                    pageTextStyle: { fontSize: 10 }
+                },
+                series: [{
+                    name: '变量类型',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                    label: { show: false },
+                    emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+                    labelLine: { show: false },
+                    data: chartData
+                }]
+            };
+
+            plcChart.setOption(option);
+        }
+
+        function plcInitSearch() {
+            const searchInput = document.getElementById('plc-search-input');
+            if (searchInput) {
+                searchInput.removeEventListener('input', plcHandleSearch);
+                searchInput.addEventListener('input', plcHandleSearch);
+            }
+        }
+
+        function plcHandleSearch() {
+            const searchTerm = this.value.toLowerCase().trim();
+            const tableRows = document.querySelectorAll('#plc-table-body tr');
+
+            if (!searchTerm) {
+                plcRenderTable();
+                return;
+            }
+
+            const filtered = plcTableData.filter(row => {
+                return (row.name || '').toLowerCase().includes(searchTerm) ||
+                       (row.address || '').toLowerCase().includes(searchTerm) ||
+                       (row.comment || '').toLowerCase().includes(searchTerm) ||
+                       (row.dataType || '').toLowerCase().includes(searchTerm);
+            });
+
+            plcRenderTable(filtered);
+        }
+
+        function plcExportToExcel() {
+            if (plcTableData.length === 0) {
+                alert('请先添加数据！');
+                return;
+            }
+
+            const fileName = (document.getElementById('plc-export-filename')?.value || 'PLC变量表') + '.xlsx';
+            const sheetName = document.getElementById('plc-sheet-name')?.value || '变量表';
+            const includeHeader = document.getElementById('plc-include-header')?.checked !== false;
+            const freezeHeader = document.getElementById('plc-freeze-header')?.checked !== false;
+            const autoWidth = document.getElementById('plc-auto-width')?.checked !== false;
+
+            const headers = ['范围', '名称', '地址', '数据类型', '注释'];
+            const dataKeys = ['scope', 'name', 'address', 'dataType', 'comment'];
+
+            const worksheetData = [];
+
+            if (includeHeader) {
+                worksheetData.push(headers);
+            }
+
+            plcTableData.forEach(row => {
+                const rowData = dataKeys.map(key => row[key] || '');
+                worksheetData.push(rowData);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+
+            if (freezeHeader && includeHeader) {
+                ws['!freeze'] = { x: 0, y: 1 };
+            }
+
+            if (autoWidth) {
+                const colWidths = headers.map((header, index) => {
+                    let maxWidth = header.length;
+                    plcTableData.forEach(row => {
+                        const cellValue = String(row[dataKeys[index]] || '');
+                        maxWidth = Math.max(maxWidth, cellValue.length);
+                    });
+                    return { wch: Math.min(maxWidth + 4, 50) };
+                });
+                ws['!cols'] = colWidths;
+            }
+
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            XLSX.writeFile(wb, fileName);
+        }
     </script>
 
     <!-- 主体内容 -->
@@ -2762,7 +3394,7 @@
         </div>
         
         <!-- 音频处理工具页面 -->
-        <div id="audio-tool-page" class="container mx-auto px-8 py-8 hidden">
+        <div id="audio-tool-page" class="container mx-auto px-8 py-6 hidden">
             <!-- 语音参数区 -->
             <div class="audio-card">
                 <h2><i class="fa fa-cog"></i> 语音参数</h2>
@@ -2878,14 +3510,285 @@
                 </div>
             </div>
         </div>
+
+        <!-- PLC变量表工具页面 -->
+        <div id="plc-variable-page" class="container mx-auto px-8 py-6 hidden">
+
+            <!-- 步骤1：文件上传 -->
+            <div id="plc-step-1">
+                <div class="flex flex-col lg:flex-row gap-8">
+                    <!-- 左侧：文件上传区 -->
+                    <div class="lg:w-2/3">
+                        <!-- 文件上传卡片 -->
+                        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                            <h2 class="text-xl font-bold text-dark mb-6">上传 PLC 变量表文件</h2>
+
+                            <!-- 上传区域 -->
+                            <div id="plc-upload-section" class="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-all"
+                                 ondragover="plcHandleDragOver(event)" ondragleave="plcHandleDragLeave(event)" ondrop="plcHandleDrop(event)">
+                                <div class="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fa fa-table text-4xl text-primary"></i>
+                                </div>
+                                <p class="text-lg font-medium text-dark mb-2">点击或将文件拖拽至此处</p>
+                                <p class="text-sm text-secondary mb-6">支持 .export / .xml / .txt 格式 (最大 20MB)</p>
+                                <form>
+                                    <input type="file" id="plc-file-input" class="hidden" accept=".export,.xml,.txt" onchange="plcHandleFileUpload(event)">
+                                    <button type="button" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors" onclick="document.getElementById('plc-file-input').click()">
+                                        浏览本地文件
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- 文件预览 -->
+                            <div class="mt-6">
+                                <div class="flex items-center mb-2">
+                                    <input type="text" id="plc-file-path" class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="已选择的文件路径">
+                                    <button class="ml-2 bg-gray-100 border border-gray-300 px-4 py-2 rounded-md text-secondary hover:bg-gray-50" onclick="document.getElementById('plc-file-input').click()">
+                                        浏览
+                                    </button>
+                                </div>
+                                <div class="border border-gray-300 rounded-md mt-2">
+                                    <textarea id="plc-file-content" class="w-full h-40 p-3 text-sm font-mono" placeholder="文件内容预览"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 操作提示 -->
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <div class="flex items-start">
+                                <div class="text-amber-500 text-xl mr-4">
+                                    <i class="fa fa-lightbulb-o"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-amber-500 mb-1">提示：</h3>
+                                    <p class="text-sm text-amber-600">支持SoMachine导出的变量表格式，以及标准文本格式的变量表文件。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：支持的数据类型 -->
+                    <div class="lg:w-1/3">
+                        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                            <h2 class="text-xl font-bold text-dark mb-6">支持的数据类型</h2>
+                            <div class="space-y-3">
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-blue-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">BOOL</span>
+                                    <span class="ml-auto text-xs text-gray-400">布尔型</span>
+                                </div>
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-teal-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">REAL</span>
+                                    <span class="ml-auto text-xs text-gray-400">浮点数</span>
+                                </div>
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-amber-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">DINT</span>
+                                    <span class="ml-auto text-xs text-gray-400">双整数</span>
+                                </div>
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-purple-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">INT</span>
+                                    <span class="ml-auto text-xs text-gray-400">整数</span>
+                                </div>
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-pink-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">WORD</span>
+                                    <span class="ml-auto text-xs text-gray-400">字</span>
+                                </div>
+                                <div class="flex items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="w-3 h-3 bg-indigo-500 rounded-full mr-3"></span>
+                                    <span class="text-secondary">DWORD</span>
+                                    <span class="ml-auto text-xs text-gray-400">双字</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 步骤2：检查核对 -->
+            <div id="plc-step-2" class="hidden">
+                <!-- 统计仪表盘 -->
+                <main class="flex-grow p-6 space-y-6">
+                    <!-- 数据卡片行 -->
+                    <section class="grid grid-cols-4 gap-6">
+                        <div class="data-card p-6 flex items-center gap-4">
+                            <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
+                                <i class="fa fa-pie-chart text-3xl text-blue-600"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">总变量数量</p>
+                                <p class="text-2xl font-bold text-slate-800" id="plc-total-count">0</p>
+                            </div>
+                        </div>
+                        <div class="data-card p-6 flex items-center gap-4">
+                            <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                                <i class="fa fa-file-text-o text-3xl text-indigo-600"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">文件大小</p>
+                                <p class="text-2xl font-bold text-slate-800" id="plc-file-size-kb">0 KB</p>
+                            </div>
+                        </div>
+                        <div class="data-card p-6 flex items-center gap-4">
+                            <div class="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center">
+                                <i class="fa fa-list-alt text-3xl text-teal-600"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">类型种类</p>
+                                <p class="text-2xl font-bold text-slate-800" id="plc-type-count">0</p>
+                            </div>
+                        </div>
+                        <div class="data-card p-6 flex items-center gap-4 border-l-4 border-l-amber-400">
+                            <div class="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center">
+                                <i class="fa fa-exclamation-circle text-3xl text-amber-600"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">未识别项</p>
+                                <p class="text-2xl font-bold text-slate-800" id="plc-unknown-count">0</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 图表与表格混合区 -->
+                    <section class="grid grid-cols-12 gap-6">
+                        <!-- 可视化图表 -->
+                        <div class="col-span-4 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                            <h3 class="text-sm font-bold text-slate-800 mb-4 flex justify-between items-center">
+                                变量类型分布
+                                <i class="fa fa-question-circle text-slate-300"></i>
+                            </h3>
+                            <div class="w-full h-64" id="plc-type-dist-chart"></div>
+                            <div class="mt-4 grid grid-cols-2 gap-4" id="plc-chart-stats">
+                            </div>
+                        </div>
+                        <!-- 数据表格 -->
+                        <div class="col-span-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <div class="flex items-center gap-4">
+                                    <h3 class="text-sm font-bold text-slate-800">变量列表 (详细)</h3>
+                                    <div class="relative">
+                                        <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                        <input id="plc-search-input" class="pl-10 pr-4 py-1.5 text-xs border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" placeholder="搜索变量名/地址..." type="text"/>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors" onclick="plcAddRow()"><i class="fa fa-plus"></i></button>
+                                    <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors" onclick="plcClearAllData()"><i class="fa fa-trash"></i></button>
+                                    <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><i class="fa fa-filter"></i></button>
+                                    <button class="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors"><i class="fa fa-cog"></i></button>
+                                </div>
+                            </div>
+                            <div class="table-container scrollbar-hide">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <thead class="bg-slate-50 sticky top-0 z-10 text-slate-500 uppercase font-semibold">
+                                        <tr>
+                                            <th class="px-6 py-4">序号</th>
+                                            <th class="px-6 py-4">范围</th>
+                                            <th class="px-6 py-4">名称</th>
+                                            <th class="px-6 py-4">地址</th>
+                                            <th class="px-6 py-4">数据类型</th>
+                                            <th class="px-6 py-4">注释</th>
+                                            <th class="px-6 py-4 text-center">状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="plc-table-body" class="divide-y divide-slate-50 text-slate-700">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <!-- 表格底部 -->
+                            <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                                <p class="text-[10px] text-slate-400" id="plc-table-info">共计 0 条数据</p>
+                                <div class="flex gap-1">
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </main>
+
+                <div class="flex justify-between p-6">
+                    <button id="plc-back-btn" class="bg-gray-100 border border-gray-300 px-6 py-2 rounded-md text-secondary hover:bg-gray-50" onclick="plcSwitchNav(1)">
+                        返回上传
+                    </button>
+                    <button id="plc-export-btn" class="bg-primary text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors" onclick="plcSwitchNav(3)">
+                        下一步导出
+                    </button>
+                </div>
+            </div>
+
+            <!-- 步骤3：导出设置 -->
+            <div id="plc-step-3" class="hidden">
+                <div class="max-w-2xl mx-auto">
+                    <div class="bg-white rounded-lg shadow-sm p-8">
+                        <h2 class="text-xl font-bold text-dark mb-6">导出设置</h2>
+
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-bold text-secondary mb-2">导出文件名</label>
+                                <input type="text" id="plc-export-filename" class="w-full border border-gray-300 rounded-md px-4 py-3" value="PLC变量表">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-secondary mb-2">工作表名称</label>
+                                <input type="text" id="plc-sheet-name" class="w-full border border-gray-300 rounded-md px-4 py-3" value="变量表">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-secondary mb-2">导出选项</label>
+                                <div class="space-y-3 pl-2">
+                                    <label class="flex items-center">
+                                        <input type="checkbox" id="plc-include-header" checked class="mr-3 w-4 h-4">
+                                        <span class="text-secondary">包含表头</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" id="plc-freeze-header" checked class="mr-3 w-4 h-4">
+                                        <span class="text-secondary">冻结首行</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" id="plc-auto-width" checked class="mr-3 w-4 h-4">
+                                        <span class="text-secondary">自动列宽</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-gray-200 pt-6">
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                                    <div class="flex items-start">
+                                        <i class="fa fa-info-circle text-blue-500 mt-1 mr-3"></i>
+                                        <div>
+                                            <h4 class="font-bold text-blue-800 mb-1">导出预览</h4>
+                                            <p class="text-sm text-blue-600">
+                                                共 <span class="font-bold" id="plc-export-count">0</span> 条数据将被导出。
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-between">
+                                    <button class="bg-gray-100 border border-gray-300 px-6 py-2.5 rounded-md text-secondary hover:bg-gray-50" onclick="plcSwitchNav(2)">
+                                        <i class="fa fa-arrow-left mr-2"></i>返回清单
+                                    </button>
+                                    <button class="bg-primary text-white px-8 py-2.5 rounded-md hover:bg-blue-600 transition-colors font-bold" onclick="plcExportToExcel()">
+                                        <i class="fa fa-download mr-2"></i>立即导出
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- 页脚 -->
-    <footer class="bg-white shadow-sm py-4 mt-8">
+    <footer class="bg-white shadow-sm py-3 flex-shrink-0">
         <div class="container mx-auto px-8 text-center">
             <p class="text-sm text-secondary">© 2026 工业自动化点表工具 - 助力工程师实现效率飞跃</p>
         </div>
     </footer>
+    </div>
 
     <!-- 开发者信息窗口 -->
     <div id="developer-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
