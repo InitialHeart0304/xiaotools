@@ -2361,6 +2361,39 @@
             setTimeout(() => toast.remove(), 3000);
         }
         
+        // 生成任务ID
+        function generateTaskId() {
+            return 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // 轮询进度
+        function pollProgress(taskId, total, onProgress) {
+            const interval = setInterval(() => {
+                fetch('/audio/api/progress/' + taskId)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            clearInterval(interval);
+                            return;
+                        }
+                        const completed = data.completed || 0;
+                        const failed = data.failed || 0;
+                        const done = data.done || false;
+                        const percent = Math.round((completed + failed) / total * 100);
+                        
+                        onProgress(percent, completed, failed, done);
+                        
+                        if (done) {
+                            clearInterval(interval);
+                        }
+                    })
+                    .catch(() => {
+                        clearInterval(interval);
+                    });
+            }, 500);
+            return interval;
+        }
+        
         // 批量生成
         function audioGenerate() {
             const splitLines = document.getElementById('audioSplitLines')?.checked || true;
@@ -2373,10 +2406,12 @@
             }
             
             audioProgressBar.style.display = 'block';
-            audioProgressFill.style.width = '20%';
+            audioProgressFill.style.width = '0%';
             
             if (splitLines) {
-                audioStatusText.innerHTML = `<i class="fa fa-microphone"></i> 正在批量生成 ${audioRows.length} 个语音文件（${params.format}）...`;
+                const total = audioRows.length;
+                const taskId = generateTaskId();
+                audioStatusText.innerHTML = `<i class="fa fa-microphone"></i> 正在批量生成 ${total} 个语音文件（${params.format}）...`;
                 
                 // 判断是否存在自定义文件名
                 const hasCustom = audioRows.some(r => (r.filename || '').trim());
@@ -2386,13 +2421,21 @@
                     ? {
                         items: audioRows.map(r => ({ text: r.text, filename: r.filename || '' })),
                         ...params,
-                        default_template: template
+                        default_template: template,
+                        task_id: taskId
                     }
                     : {
                         lines: audioRows.map(r => r.text),
                         ...params,
-                        filename: template
+                        filename: template,
+                        task_id: taskId
                     };
+                
+                // 启动进度轮询
+                let progressInterval = pollProgress(taskId, total, (percent, completed, failed, done) => {
+                    audioProgressFill.style.width = percent + '%';
+                    audioStatusText.innerHTML = `<i class="fa fa-microphone"></i> 正在生成... ${completed + failed}/${total} (${percent}%)`;
+                });
                 
                 fetch(apiUrl, {
                     method: 'POST',
@@ -2400,6 +2443,7 @@
                     body: JSON.stringify(bodyData)
                 })
                 .then(res => {
+                    clearInterval(progressInterval);
                     const contentType = res.headers.get('Content-Type') || '';
                     if (contentType.includes('application/json')) {
                         return res.json().then(data => {
@@ -2411,7 +2455,7 @@
                     const successCount = parseInt(res.headers.get('X-Success-Count') || '0');
                     const failedCount = parseInt(res.headers.get('X-Failed-Count') || '0');
                     
-                    audioProgressFill.style.width = '80%';
+                    audioProgressFill.style.width = '100%';
                     return res.blob().then(blob => ({ blob, successCount, failedCount }));
                 })
                 .then(({ blob, successCount, failedCount }) => {
@@ -2420,7 +2464,6 @@
                     a.href = url;
                     a.download = `tts_batch_${Date.now()}.zip`;
                     a.click();
-                    audioProgressFill.style.width = '100%';
                     
                     let statusMsg = `<i class="fa fa-check-circle"></i> 已成功生成 ${successCount} 个语音文件`;
                     if (failedCount > 0) {
@@ -2435,14 +2478,23 @@
                     audioShowToast(toastMsg, failedCount > 0 ? 'info' : 'success');
                 })
                 .catch(err => {
+                    clearInterval(progressInterval);
                     audioStatusText.innerHTML = `<i class="fa fa-exclamation-circle"></i> 生成失败: ${err.message}`;
                     audioShowToast('生成失败: ' + err.message, 'error');
                 })
                 .finally(() => {
+                    // 清理进度记录
+                    if (taskId) {
+                        fetch('/audio/api/cleanup-progress', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ task_id: taskId })
+                        }).catch(() => {});
+                    }
                     setTimeout(() => {
                         audioProgressBar.style.display = 'none';
                         audioProgressFill.style.width = '0%';
-                    }, 1000);
+                    }, 2000);
                 });
             } else {
                 const text = audioRows.map(r => r.text).join('\n');
