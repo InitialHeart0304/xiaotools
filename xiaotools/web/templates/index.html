@@ -2400,7 +2400,6 @@
                     body: JSON.stringify(bodyData)
                 })
                 .then(res => {
-                    // 先检查Content-Type，如果是JSON则说明是错误响应
                     const contentType = res.headers.get('Content-Type') || '';
                     if (contentType.includes('application/json')) {
                         return res.json().then(data => {
@@ -2408,18 +2407,32 @@
                         });
                     }
                     if (!res.ok) throw new Error('生成失败');
+                    
+                    const successCount = parseInt(res.headers.get('X-Success-Count') || '0');
+                    const failedCount = parseInt(res.headers.get('X-Failed-Count') || '0');
+                    
                     audioProgressFill.style.width = '80%';
-                    return res.blob();
+                    return res.blob().then(blob => ({ blob, successCount, failedCount }));
                 })
-                .then(blob => {
+                .then(({ blob, successCount, failedCount }) => {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
                     a.download = `tts_batch_${Date.now()}.zip`;
                     a.click();
                     audioProgressFill.style.width = '100%';
-                    audioStatusText.innerHTML = `<i class="fa fa-check-circle"></i> 已生成 ${audioRows.length} 个语音文件`;
-                    audioShowToast(`成功生成 ${audioRows.length} 个语音文件`, 'success');
+                    
+                    let statusMsg = `<i class="fa fa-check-circle"></i> 已成功生成 ${successCount} 个语音文件`;
+                    if (failedCount > 0) {
+                        statusMsg += `，${failedCount} 个失败`;
+                    }
+                    audioStatusText.innerHTML = statusMsg;
+                    
+                    let toastMsg = `成功生成 ${successCount} 个语音文件`;
+                    if (failedCount > 0) {
+                        toastMsg += `（${failedCount} 个失败，请重试）`;
+                    }
+                    audioShowToast(toastMsg, failedCount > 0 ? 'info' : 'success');
                 })
                 .catch(err => {
                     audioStatusText.innerHTML = `<i class="fa fa-exclamation-circle"></i> 生成失败: ${err.message}`;
