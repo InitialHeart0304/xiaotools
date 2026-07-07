@@ -77,6 +77,14 @@ def check_ffmpeg_available():
 FFMPEG_AVAILABLE = check_ffmpeg_available()
 print(f"[Init] ffmpeg available: {FFMPEG_AVAILABLE}")
 
+MINIAUDIO_AVAILABLE = False
+try:
+    import miniaudio
+    MINIAUDIO_AVAILABLE = True
+    print(f"[Init] miniaudio available: True")
+except ImportError:
+    print(f"[Init] miniaudio available: False")
+
 VOICES = {
     "xiaoxiao": ("晓晓 (中文女声)", "zh-CN-XiaoxiaoNeural"),
     "xiaoyi": ("晓伊 (中文女声)", "zh-CN-XiaoyiNeural"),
@@ -153,7 +161,6 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", t
     for attempt in range(retry):
         loop = None
         mp3_path = None
-        wav_path = None
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -165,40 +172,16 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", t
             future = asyncio.wait_for(communicate.save(mp3_path), timeout=timeout)
             loop.run_until_complete(future)
             
+            with open(mp3_path, 'rb') as f:
+                mp3_data = f.read()
+            
             if fmt == "mp3":
-                with open(mp3_path, 'rb') as f:
-                    data = f.read()
-                buffer = io.BytesIO(data)
+                buffer = io.BytesIO(mp3_data)
                 buffer.seek(0)
                 return buffer, "mp3"
             
-            if not FFMPEG_AVAILABLE:
-                raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
-            
-            try:
-                from pydub import AudioSegment
-                print(f"[WAV] Using pydub for conversion")
-                audio = AudioSegment.from_file(mp3_path, format="mp3")
-                fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-                os.close(fd)
-                audio.export(wav_path, format="wav")
-            except ImportError:
-                print(f"[WAV] pydub not available, using subprocess")
-                import subprocess
-                fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-                os.close(fd)
-                result = subprocess.run(
-                    ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout
-                )
-                if result.returncode != 0:
-                    raise Exception(f"ffmpeg转换失败: {result.stderr}")
-            
-            with open(wav_path, 'rb') as f:
-                data = f.read()
-            buffer = io.BytesIO(data)
+            wav_data = mp3_to_wav_bytes(mp3_data)
+            buffer = io.BytesIO(wav_data)
             buffer.seek(0)
             return buffer, "wav"
         
@@ -216,12 +199,61 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", t
                     loop.close()
             except Exception:
                 pass
+            if mp3_path and os.path.exists(mp3_path):
+                try:
+                    os.unlink(mp3_path)
+                except OSError:
+                    pass
+
+def mp3_to_wav_bytes(mp3_data):
+    """将MP3字节数据转换为WAV字节数据，优先使用miniaudio（纯Python，无需ffmpeg）"""
+    if MINIAUDIO_AVAILABLE:
+        import miniaudio
+        decoded = miniaudio.decode(mp3_data, nchannels=2, sample_rate=24000)
+        wav_buf = io.BytesIO()
+        import wave
+        with wave.open(wav_buf, 'wb') as wf:
+            wf.setnchannels(decoded.nchannels)
+            wf.setsampwidth(2)
+            wf.setframerate(decoded.sample_rate)
+            wf.writeframes(decoded.samples.tobytes())
+        wav_buf.seek(0)
+        return wav_buf.read()
+    
+    if FFMPEG_AVAILABLE:
+        mp3_fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_mp3_")
+        wav_fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_wav_")
+        os.close(mp3_fd)
+        os.close(wav_fd)
+        try:
+            with open(mp3_path, 'wb') as f:
+                f.write(mp3_data)
+            try:
+                from pydub import AudioSegment
+                audio = AudioSegment.from_file(mp3_path, format="mp3")
+                audio.export(wav_path, format="wav")
+            except ImportError:
+                import subprocess
+                result = subprocess.run(
+                    ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "24000", "-ac", "2", wav_path, "-y"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode != 0:
+                    raise Exception(f"ffmpeg转换失败: {result.stderr}")
+            with open(wav_path, 'rb') as f:
+                return f.read()
+        finally:
             for p in [mp3_path, wav_path]:
                 if p and os.path.exists(p):
                     try:
                         os.unlink(p)
                     except OSError:
                         pass
+    
+    raise Exception("无法转换为WAV格式：服务器未安装ffmpeg且miniaudio不可用。")
+
 
 async def generate_audio_async(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", timeout=120):
     """异步生成音频，返回 (bytes数据, 实际格式)"""
@@ -232,7 +264,6 @@ async def generate_audio_async(text, voice_code, rate="+0%", volume="+0%", fmt="
     text = preprocess_text(text)
     
     mp3_path = None
-    wav_path = None
     try:
         communicate = edge_tts.Communicate(text, voice_code, rate=rate, volume=volume)
         fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_")
@@ -240,44 +271,21 @@ async def generate_audio_async(text, voice_code, rate="+0%", volume="+0%", fmt="
         
         await asyncio.wait_for(communicate.save(mp3_path), timeout=timeout)
         
+        with open(mp3_path, 'rb') as f:
+            mp3_data = f.read()
+        
         if fmt == "mp3":
-            with open(mp3_path, 'rb') as f:
-                data = f.read()
-            return data, "mp3"
+            return mp3_data, "mp3"
         
-        if not FFMPEG_AVAILABLE:
-            raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
-        
-        try:
-            from pydub import AudioSegment
-            audio = AudioSegment.from_file(mp3_path, format="mp3")
-            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-            os.close(fd)
-            audio.export(wav_path, format="wav")
-        except ImportError:
-            import subprocess
-            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-            os.close(fd)
-            result = subprocess.run(
-                ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
-                capture_output=True,
-                text=True,
-                timeout=timeout
-            )
-            if result.returncode != 0:
-                raise Exception(f"ffmpeg转换失败: {result.stderr}")
-        
-        with open(wav_path, 'rb') as f:
-            data = f.read()
-        return data, "wav"
+        wav_data = mp3_to_wav_bytes(mp3_data)
+        return wav_data, "wav"
     
     finally:
-        for p in [mp3_path, wav_path]:
-            if p and os.path.exists(p):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
+        if mp3_path and os.path.exists(mp3_path):
+            try:
+                os.unlink(mp3_path)
+            except OSError:
+                pass
 
 async def generate_audio_with_retry_async(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", timeout=120, retry=5, semaphore=None):
     """带重试的异步音频生成，支持 Semaphore 并发限制"""
