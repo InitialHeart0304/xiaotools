@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, Response
 import pandas as pd
 import re
 import json
@@ -12,6 +12,9 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import uuid
 
 # 添加父目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -47,6 +50,11 @@ USERS_FILE = os.path.join(app.root_path, 'data', 'users.json')
 # 临时文件存储
 TEMP_DIR = tempfile.gettempdir()
 current_result = None
+
+# 批量任务进度存储 {task_id: {"total": int, "completed": int, "failed": int, "done": bool, "error": str}}
+_batch_progress = {}
+_batch_lock = threading.Lock()
+_batch_async_lock = asyncio.Lock()
 
 def check_ffmpeg_available():
     try:
@@ -214,6 +222,83 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", t
                         os.unlink(p)
                     except OSError:
                         pass
+
+async def generate_audio_async(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", timeout=120):
+    """异步生成音频，返回 (bytes数据, 实际格式)"""
+    fmt = fmt.lower().strip() if fmt else "mp3"
+    if fmt not in ("mp3", "wav"):
+        fmt = "mp3"
+    
+    text = preprocess_text(text)
+    
+    mp3_path = None
+    wav_path = None
+    try:
+        communicate = edge_tts.Communicate(text, voice_code, rate=rate, volume=volume)
+        fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_")
+        os.close(fd)
+        
+        await asyncio.wait_for(communicate.save(mp3_path), timeout=timeout)
+        
+        if fmt == "mp3":
+            with open(mp3_path, 'rb') as f:
+                data = f.read()
+            return data, "mp3"
+        
+        if not FFMPEG_AVAILABLE:
+            raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
+        
+        try:
+            from pydub import AudioSegment
+            audio = AudioSegment.from_file(mp3_path, format="mp3")
+            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
+            os.close(fd)
+            audio.export(wav_path, format="wav")
+        except ImportError:
+            import subprocess
+            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
+            os.close(fd)
+            result = subprocess.run(
+                ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if result.returncode != 0:
+                raise Exception(f"ffmpeg转换失败: {result.stderr}")
+        
+        with open(wav_path, 'rb') as f:
+            data = f.read()
+        return data, "wav"
+    
+    finally:
+        for p in [mp3_path, wav_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+async def generate_audio_with_retry_async(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", timeout=120, retry=5, semaphore=None):
+    """带重试的异步音频生成，支持 Semaphore 并发限制"""
+    async def _do_generate():
+        return await generate_audio_async(text, voice_code, rate, volume, fmt, timeout)
+    
+    for attempt in range(retry):
+        try:
+            if semaphore:
+                async with semaphore:
+                    return await _do_generate()
+            else:
+                return await _do_generate()
+        except asyncio.TimeoutError:
+            print(f"[Audio] 超时，重试 ({attempt+1}/{retry})")
+            if attempt == retry - 1:
+                raise
+        except Exception as e:
+            print(f"[Audio] 生成失败 ({attempt+1}/{retry}): {str(e)}")
+            if attempt == retry - 1:
+                raise
 
 def detect_columns(headers):
     """智能识别文本列和文件名列的位置"""
@@ -614,41 +699,84 @@ def audio_api_batch():
     volume = data.get("volume", "+0%")
     filename_template = data.get("filename", "output_{序号}")
     fmt = data.get("format", "mp3")
+    task_id = data.get("task_id")
     
     if not lines:
         return jsonify({"error": "文本行不能为空"}), 400
     
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     total = len(lines)
+    
+    if task_id:
+        with _batch_lock:
+            _batch_progress[task_id] = {"total": total, "completed": 0, "failed": 0, "done": False, "error": None}
+    
+    async def batch_generate():
+        semaphore = asyncio.Semaphore(5)
+        
+        async def create_task(index, text):
+            try:
+                audio_data, actual_fmt = await generate_audio_with_retry_async(
+                    text, voice_code, rate, volume, fmt, semaphore=semaphore
+                )
+                base_name = format_filename(filename_template, index, text, total)
+                out_name = f"{base_name}.{actual_fmt}"
+                
+                if task_id:
+                    async with _batch_async_lock:
+                        if task_id in _batch_progress:
+                            _batch_progress[task_id]["completed"] += 1
+                
+                return {"success": True, "index": index, "name": out_name, "data": audio_data}
+            except Exception as e:
+                if task_id:
+                    async with _batch_async_lock:
+                        if task_id in _batch_progress:
+                            _batch_progress[task_id]["failed"] += 1
+                return {"success": False, "index": index, "text": text[:50] + "..." if len(text) > 50 else text, "error": str(e)}
+        
+        tasks = [create_task(i + 1, line) for i, line in enumerate(lines)]
+        results = await asyncio.gather(*tasks)
+        return results
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    results = loop.run_until_complete(batch_generate())
+    loop.close()
+    
     used_names = set()
     success_count = 0
     failed_count = 0
-    failed_items = []
     
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for i, line in enumerate(lines, 1):
-            try:
-                audio_buffer, actual_fmt = generate_audio_sync(line, voice_code, rate, volume, fmt)
-                base_name = format_filename(filename_template, i, line, total)
-                final_name = base_name
-                n = 1
-                while final_name in used_names:
-                    final_name = f"{base_name}_{n}"
-                    n += 1
-                used_names.add(final_name)
-                out_name = f"{final_name}.{actual_fmt}"
-                
-                zf.writestr(out_name, audio_buffer.getvalue())
-                success_count += 1
-                print(f"[Batch] 第{i}/{total}个音频生成成功: {out_name}")
-            except Exception as e:
-                failed_count += 1
-                failed_items.append({"index": i, "text": line[:50] + "..." if len(line) > 50 else line, "error": str(e)})
-                print(f"[Batch] 第{i}/{total}个音频生成失败: {e}")
+    for r in results:
+        if r["success"]:
+            base_name = r["name"].rsplit('.', 1)[0]
+            final_name = base_name
+            n = 1
+            while final_name in used_names:
+                final_name = f"{base_name}_{n}"
+                n += 1
+            used_names.add(final_name)
+            r["final_name"] = final_name + "." + r["name"].rsplit('.', 1)[1]
+            success_count += 1
+        else:
+            failed_count += 1
+    
+    if task_id:
+        with _batch_lock:
+            if task_id in _batch_progress:
+                _batch_progress[task_id]["done"] = True
+                _batch_progress[task_id]["success_count"] = success_count
+                _batch_progress[task_id]["failed_count"] = failed_count
     
     if success_count == 0:
         return jsonify({"error": "所有文件都生成失败"}), 500
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for r in results:
+            if r["success"]:
+                zf.writestr(r["final_name"], r["data"])
     
     zip_buffer.seek(0)
     filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
@@ -672,44 +800,89 @@ def audio_api_custom_batch():
         volume = data.get("volume", "+0%")
         default_template = data.get("default_template", "output_{序号}")
         fmt = data.get("format", "mp3")
+        task_id = data.get("task_id")
         
         if not items:
             return jsonify({"error": "文本行不能为空"}), 400
         
         voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
         total = len(items)
+        
+        valid_items = [(i + 1, item) for i, item in enumerate(items) if (item.get("text") or "").strip()]
+        
+        if task_id:
+            with _batch_lock:
+                _batch_progress[task_id] = {"total": len(valid_items), "completed": 0, "failed": 0, "done": False, "error": None}
+        
+        async def batch_generate():
+            semaphore = asyncio.Semaphore(5)
+            
+            async def create_task(index, item):
+                text = (item.get("text") or "").strip()
+                custom_name = (item.get("filename") or "").strip()
+                try:
+                    audio_data, actual_fmt = await generate_audio_with_retry_async(
+                        text, voice_code, rate, volume, fmt, semaphore=semaphore
+                    )
+                    base_name = sanitize_filename(custom_name) if custom_name \
+                        else format_filename(default_template, index, text, total)
+                    out_name = f"{base_name}.{actual_fmt}"
+                    
+                    if task_id:
+                        async with _batch_async_lock:
+                            if task_id in _batch_progress:
+                                _batch_progress[task_id]["completed"] += 1
+                    
+                    return {"success": True, "index": index, "name": out_name, "data": audio_data}
+                except Exception as e:
+                    if task_id:
+                        async with _batch_async_lock:
+                            if task_id in _batch_progress:
+                                _batch_progress[task_id]["failed"] += 1
+                    return {"success": False, "index": index, "text": text[:50] + "..." if len(text) > 50 else text, "error": str(e)}
+            
+            tasks = [create_task(idx, item) for idx, item in valid_items]
+            results = await asyncio.gather(*tasks)
+            return results
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(batch_generate())
+        loop.close()
+        
         used_names = set()
         success_count = 0
         failed_count = 0
         
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i, item in enumerate(items, 1):
-                text = (item.get("text") or "").strip()
-                custom_name = (item.get("filename") or "").strip()
-                if not text:
-                    continue
-                try:
-                    audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
-                    base_name = sanitize_filename(custom_name) if custom_name \
-                        else format_filename(default_template, i, text, total)
-                    final_name = base_name
-                    n = 1
-                    while final_name in used_names:
-                        final_name = f"{base_name}_{n}"
-                        n += 1
-                    used_names.add(final_name)
-                    out_name = f"{final_name}.{actual_fmt}"
-                    
-                    zf.writestr(out_name, audio_buffer.getvalue())
-                    success_count += 1
-                    print(f"[Custom Batch] 第{i}/{total}个音频生成成功: {out_name}")
-                except Exception as e:
-                    failed_count += 1
-                    print(f"[Custom Batch] 第{i}/{total}个音频生成失败: {e}")
+        for r in results:
+            if r["success"]:
+                base_name = r["name"].rsplit('.', 1)[0]
+                final_name = base_name
+                n = 1
+                while final_name in used_names:
+                    final_name = f"{base_name}_{n}"
+                    n += 1
+                used_names.add(final_name)
+                r["final_name"] = final_name + "." + r["name"].rsplit('.', 1)[1]
+                success_count += 1
+            else:
+                failed_count += 1
+        
+        if task_id:
+            with _batch_lock:
+                if task_id in _batch_progress:
+                    _batch_progress[task_id]["done"] = True
+                    _batch_progress[task_id]["success_count"] = success_count
+                    _batch_progress[task_id]["failed_count"] = failed_count
         
         if success_count == 0:
             return jsonify({"error": "所有文件都生成失败"}), 500
+        
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for r in results:
+                if r["success"]:
+                    zf.writestr(r["final_name"], r["data"])
         
         zip_buffer.seek(0)
         filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
@@ -724,6 +897,58 @@ def audio_api_custom_batch():
         return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/audio/api/progress/<task_id>')
+def audio_api_progress(task_id):
+    """查询批量生成进度"""
+    with _batch_lock:
+        progress = _batch_progress.get(task_id)
+    
+    if not progress:
+        return jsonify({"error": "任务不存在"}), 404
+    
+    return jsonify(progress)
+
+
+@app.route('/audio/api/cleanup-progress', methods=["POST"])
+def audio_api_cleanup_progress():
+    """清理已完成的进度记录"""
+    data = request.json or {}
+    task_id = data.get("task_id")
+    
+    with _batch_lock:
+        if task_id and task_id in _batch_progress:
+            del _batch_progress[task_id]
+            return jsonify({"success": True})
+    
+    return jsonify({"success": False, "error": "任务不存在"})
+
+
+@app.route('/audio/api/progress-stream/<task_id>')
+def audio_api_progress_stream(task_id):
+    """SSE 进度流"""
+    def event_stream():
+        import time
+        while True:
+            with _batch_lock:
+                progress = _batch_progress.get(task_id)
+            
+            if not progress:
+                yield f"data: {json.dumps({'error': '任务不存在'})}\n\n"
+                break
+            
+            yield f"data: {json.dumps(progress)}\n\n"
+            
+            if progress.get("done"):
+                with _batch_lock:
+                    if task_id in _batch_progress:
+                        del _batch_progress[task_id]
+                break
+            
+            time.sleep(0.5)
+    
+    return Response(event_stream(), mimetype="text/event-stream")
+
 
 @app.route('/audio/api/parse-excel', methods=["POST"])
 def audio_api_parse_excel():
