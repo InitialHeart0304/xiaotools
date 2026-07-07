@@ -134,7 +134,7 @@ def preprocess_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
+def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3", timeout=60, retry=3):
     """生成音频，返回 (BytesIO对象, 实际格式)"""
     fmt = fmt.lower().strip() if fmt else "mp3"
     if fmt not in ("mp3", "wav"):
@@ -142,77 +142,78 @@ def generate_audio_sync(text, voice_code, rate="+0%", volume="+0%", fmt="mp3"):
     
     text = preprocess_text(text)
     
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError("closed")
-    except (RuntimeError, Exception):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    mp3_path = None
-    wav_path = None
-    try:
-        communicate = edge_tts.Communicate(text, voice_code, rate=rate, volume=volume)
-        fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_")
-        os.close(fd)
-        loop.run_until_complete(communicate.save(mp3_path))
-        
-        if fmt == "mp3":
-            with open(mp3_path, 'rb') as f:
+    for attempt in range(retry):
+        loop = None
+        mp3_path = None
+        wav_path = None
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            communicate = edge_tts.Communicate(text, voice_code, rate=rate, volume=volume)
+            fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="tts_")
+            os.close(fd)
+            
+            future = asyncio.wait_for(communicate.save(mp3_path), timeout=timeout)
+            loop.run_until_complete(future)
+            
+            if fmt == "mp3":
+                with open(mp3_path, 'rb') as f:
+                    data = f.read()
+                buffer = io.BytesIO(data)
+                buffer.seek(0)
+                return buffer, "mp3"
+            
+            if not FFMPEG_AVAILABLE:
+                raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
+            
+            try:
+                from pydub import AudioSegment
+                print(f"[WAV] Using pydub for conversion")
+                audio = AudioSegment.from_file(mp3_path, format="mp3")
+                fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
+                os.close(fd)
+                audio.export(wav_path, format="wav")
+            except ImportError:
+                print(f"[WAV] pydub not available, using subprocess")
+                import subprocess
+                fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
+                os.close(fd)
+                result = subprocess.run(
+                    ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout
+                )
+                if result.returncode != 0:
+                    raise Exception(f"ffmpeg转换失败: {result.stderr}")
+            
+            with open(wav_path, 'rb') as f:
                 data = f.read()
             buffer = io.BytesIO(data)
             buffer.seek(0)
-            return buffer, "mp3"
+            return buffer, "wav"
         
-        if not FFMPEG_AVAILABLE:
-            raise Exception("服务器未安装ffmpeg，无法转换为WAV格式。请使用MP3格式。")
-        
-        # 优先使用pydub
-        try:
-            from pydub import AudioSegment
-            print(f"[WAV] Using pydub for conversion")
-            audio = AudioSegment.from_file(mp3_path, format="mp3")
-            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-            os.close(fd)
-            audio.export(wav_path, format="wav")
-        except ImportError:
-            # pydub不可用时，直接调用ffmpeg命令行
-            print(f"[WAV] pydub not available, using subprocess")
-            import subprocess
-            fd, wav_path = tempfile.mkstemp(suffix=".wav", prefix="tts_")
-            os.close(fd)
-            result = subprocess.run(
-                ["ffmpeg", "-i", mp3_path, "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", wav_path, "-y"],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode != 0:
-                raise Exception(f"ffmpeg转换失败: {result.stderr}")
-        
-        print(f"[WAV] Conversion successful, wav_path={wav_path}")
-        
-        with open(wav_path, 'rb') as f:
-            data = f.read()
-        buffer = io.BytesIO(data)
-        buffer.seek(0)
-        return buffer, "wav"
-    except Exception as e:
-        print(f"[WAV] Conversion error: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise Exception(f"WAV格式转换失败: {str(e)}")
-    finally:
-        try:
-            loop.close()
-        except Exception:
-            pass
-        for p in [mp3_path, wav_path]:
-            if p and os.path.exists(p):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
+        except asyncio.TimeoutError:
+            print(f"[Audio] 超时，重试 ({attempt+1}/{retry})")
+            if attempt == retry - 1:
+                raise Exception(f"音频生成超时（{timeout}秒）")
+        except Exception as e:
+            print(f"[Audio] 生成失败 ({attempt+1}/{retry}): {type(e).__name__}: {str(e)}")
+            if attempt == retry - 1:
+                raise
+        finally:
+            try:
+                if loop:
+                    loop.close()
+            except Exception:
+                pass
+            for p in [mp3_path, wav_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
 
 def detect_columns(headers):
     """智能识别文本列和文件名列的位置"""
@@ -619,37 +620,47 @@ def audio_api_batch():
     
     voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
     total = len(lines)
-    generated_audio = []
     used_names = set()
-    
-    for i, line in enumerate(lines, 1):
-        try:
-            audio_buffer, actual_fmt = generate_audio_sync(line, voice_code, rate, volume, fmt)
-            base_name = format_filename(filename_template, i, line, total)
-            final_name = base_name
-            n = 1
-            while final_name in used_names:
-                final_name = f"{base_name}_{n}"
-                n += 1
-            used_names.add(final_name)
-            out_name = f"{final_name}.{actual_fmt}"
-            
-            generated_audio.append((out_name, audio_buffer.getvalue()))
-        except Exception as e:
-            print(f"第{i}行生成失败: {e}")
-    
-    if not generated_audio:
-        return jsonify({"error": "所有文件都生成失败"}), 500
+    success_count = 0
+    failed_count = 0
+    failed_items = []
     
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in generated_audio:
-            zf.writestr(name, data)
+        for i, line in enumerate(lines, 1):
+            try:
+                audio_buffer, actual_fmt = generate_audio_sync(line, voice_code, rate, volume, fmt)
+                base_name = format_filename(filename_template, i, line, total)
+                final_name = base_name
+                n = 1
+                while final_name in used_names:
+                    final_name = f"{base_name}_{n}"
+                    n += 1
+                used_names.add(final_name)
+                out_name = f"{final_name}.{actual_fmt}"
+                
+                zf.writestr(out_name, audio_buffer.getvalue())
+                success_count += 1
+                print(f"[Batch] 第{i}/{total}个音频生成成功: {out_name}")
+            except Exception as e:
+                failed_count += 1
+                failed_items.append({"index": i, "text": line[:50] + "..." if len(line) > 50 else line, "error": str(e)})
+                print(f"[Batch] 第{i}/{total}个音频生成失败: {e}")
+    
+    if success_count == 0:
+        return jsonify({"error": "所有文件都生成失败"}), 500
+    
     zip_buffer.seek(0)
     filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-    return send_file(zip_buffer, mimetype="application/zip",
-                     as_attachment=True,
-                     download_name=filename)
+    
+    response = send_file(zip_buffer, mimetype="application/zip",
+                         as_attachment=True,
+                         download_name=filename)
+    
+    response.headers['X-Success-Count'] = str(success_count)
+    response.headers['X-Failed-Count'] = str(failed_count)
+    
+    return response
 
 @app.route('/audio/api/custom-batch', methods=["POST"])
 def audio_api_custom_batch():
@@ -667,42 +678,50 @@ def audio_api_custom_batch():
         
         voice_code = VOICES.get(voice_key, VOICES["xiaoxiao"])[1]
         total = len(items)
-        generated_audio = []
         used_names = set()
-        
-        for i, item in enumerate(items, 1):
-            text = (item.get("text") or "").strip()
-            custom_name = (item.get("filename") or "").strip()
-            if not text:
-                continue
-            try:
-                audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
-                base_name = sanitize_filename(custom_name) if custom_name \
-                    else format_filename(default_template, i, text, total)
-                final_name = base_name
-                n = 1
-                while final_name in used_names:
-                    final_name = f"{base_name}_{n}"
-                    n += 1
-                used_names.add(final_name)
-                out_name = f"{final_name}.{actual_fmt}"
-                
-                generated_audio.append((out_name, audio_buffer.getvalue()))
-            except Exception as e:
-                print(f"  第{i}行失败: {e}")
-        
-        if not generated_audio:
-            return jsonify({"error": "所有文件都生成失败"}), 500
+        success_count = 0
+        failed_count = 0
         
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, audio_data in generated_audio:
-                zf.writestr(name, audio_data)
+            for i, item in enumerate(items, 1):
+                text = (item.get("text") or "").strip()
+                custom_name = (item.get("filename") or "").strip()
+                if not text:
+                    continue
+                try:
+                    audio_buffer, actual_fmt = generate_audio_sync(text, voice_code, rate, volume, fmt)
+                    base_name = sanitize_filename(custom_name) if custom_name \
+                        else format_filename(default_template, i, text, total)
+                    final_name = base_name
+                    n = 1
+                    while final_name in used_names:
+                        final_name = f"{base_name}_{n}"
+                        n += 1
+                    used_names.add(final_name)
+                    out_name = f"{final_name}.{actual_fmt}"
+                    
+                    zf.writestr(out_name, audio_buffer.getvalue())
+                    success_count += 1
+                    print(f"[Custom Batch] 第{i}/{total}个音频生成成功: {out_name}")
+                except Exception as e:
+                    failed_count += 1
+                    print(f"[Custom Batch] 第{i}/{total}个音频生成失败: {e}")
+        
+        if success_count == 0:
+            return jsonify({"error": "所有文件都生成失败"}), 500
+        
         zip_buffer.seek(0)
         filename = f"tts_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        return send_file(zip_buffer, mimetype="application/zip",
-                         as_attachment=True,
-                         download_name=filename)
+        
+        response = send_file(zip_buffer, mimetype="application/zip",
+                             as_attachment=True,
+                             download_name=filename)
+        
+        response.headers['X-Success-Count'] = str(success_count)
+        response.headers['X-Failed-Count'] = str(failed_count)
+        
+        return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
